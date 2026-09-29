@@ -8,6 +8,12 @@ navegador ni URLs que configurar**:
 - **Con un atajo:** pon el cursor en el campo y pulsa **`Ctrl+Alt+2`**. Funciona
   en cualquier aplicación, no solo en el navegador.
 
+[![Demo: el código 2FA se escribe solo al iniciar sesión](docs/demo.gif)](docs/demo.mp4)
+
+▶️ **[Ver el vídeo demo completo (1 minuto)](docs/demo.mp4)**: la app, la
+importación desde Google Authenticator con la webcam, el relleno automático,
+el selector de cuenta y el atajo de teclado.
+
 ![Ventana principal](docs/screenshot-main.png)
 
 - 📥 **Importa todas tus cuentas de Google Authenticator** de una vez, con la
@@ -376,6 +382,10 @@ ejecuta en una sesión aislada (Xvfb, D-Bus y accesibilidad propios, `HOME`
 temporal y secretos en un fichero temporal): no toca tu escritorio ni tu
 llavero. Necesita `xvfb`, `at-spi2-core` y un Chromium
 (`npx playwright install chromium` o `CHROME=/ruta tests/e2e/run.sh`).
+
+Regenerar el vídeo demo (`docs/demo.mp4` y `docs/demo.gif`): `scripts/demo/run.sh`.
+Graba cada escena en una sesión aislada con cuentas falsas y una cámara
+simulada, y la monta con `ffmpeg` (necesita `xvfb`, `ffmpeg` y Google Chrome).
 
 Probar la demo a mano:
 

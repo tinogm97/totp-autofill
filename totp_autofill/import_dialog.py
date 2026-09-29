@@ -39,7 +39,7 @@ class ImportDialog(Gtk.Dialog):
         self.checks: list[tuple[Gtk.CheckButton, ImportedAccount]] = []
         self.known_secrets = {s.upper() for a in store.load()
                               if (s := store.secrets.get(a.id))}
-        self.set_default_size(640, 720)
+        self.set_default_size(640, 560)
         self.add_button("Cancelar", Gtk.ResponseType.CANCEL)
         self.import_button = self.add_button("Importar", Gtk.ResponseType.OK)
         self.import_button.get_style_context().add_class("suggested-action")
@@ -76,7 +76,7 @@ class ImportDialog(Gtk.Dialog):
         box.add(self.status)
 
         self.listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
-        scrolled = Gtk.ScrolledWindow(vexpand=True, min_content_height=160)
+        scrolled = Gtk.ScrolledWindow(vexpand=True, min_content_height=130)
         scrolled.add(self.listbox)
         box.pack_start(scrolled, True, True, 0)
         self.warnings = Gtk.Label(xalign=0, wrap=True)
@@ -125,7 +125,7 @@ class ImportDialog(Gtk.Dialog):
             self.scanner = CameraScanner(self._add_uris_from_codes, device=device)
             self.scanner.on_error = lambda msg: GLib.idle_add(self._camera_failed, msg)
             self.viewer.pack_start(self.scanner.widget, True, True, 0)
-            self.scanner.widget.set_size_request(-1, 300)
+            self.scanner.widget.set_size_request(-1, 220)
             self.viewer.show_all()
             self.scanner.start()
         except CameraError as exc:

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.1 — 2026-09-29
+
+- Vídeo demo (`docs/demo.mp4`, 1 min) y GIF en el README; se regenera con
+  `scripts/demo/run.sh` en una sesión aislada.
+- La ventana de importación cabe en pantallas de 720 px de alto con la cámara
+  abierta (antes el botón «Importar» podía quedar fuera).
+
 ## 2.1.0 — 2026-09-29
 
 - **Importar desde Google Authenticator**: botón *Importar* en la app para
