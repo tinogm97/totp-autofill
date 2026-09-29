@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=TOTP Autofill
+Comment=Autocompletado de códigos 2FA en formularios web
+Exec=@BIN@
+Icon=totp-autofill
+Terminal=false
+Categories=Utility;Security;
+Keywords=2fa;totp;otp;authenticator;mfa;
+StartupWMClass=totp-autofill

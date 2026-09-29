@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon-32.png" alt="" width="24" height="24">
+    <h1>TOTP Autofill</h1>
+  </header>
+  <p id="status" class="status">Conectando con la app…</p>
+  <section id="accounts" hidden>
+    <h2>Cuentas para esta página</h2>
+    <ul id="account-list"></ul>
+  </section>
+  <p id="message" class="message"></p>
+  <footer>Atajo: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd></footer>
+  <script src="popup.js"></script>
+</body>
+</html>

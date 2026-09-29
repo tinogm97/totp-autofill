@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  Página de demostración de un login con 2FA en dos pasos, para probar
+  TOTP Autofill en local:
+
+    python3 -m http.server 8765 --directory examples
+    totp-autofill add "Demo" "http://localhost:8765/demo-2fa.html" --secret JBSWY3DPEHPK3PXP --auto-submit
+
+  y abre http://localhost:8765/demo-2fa.html en el navegador.
+  Con ?split=1 el código se pide en 6 cajas de un dígito.
+  (Ojo: el secreto JBSWY3DPEHPK3PXP es público, úsalo solo para la demo.)
+-->
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Demo 2FA - TOTP Autofill</title>
+  <style>
+    body { font: 15px system-ui, sans-serif; display: grid; place-items: center; min-height: 90vh; background: #f3f4f6; }
+    form, .done { background: white; padding: 24px 32px; border-radius: 12px; box-shadow: 0 4px 20px #0001; width: 300px; }
+    input { display: block; width: 100%; box-sizing: border-box; margin: 6px 0 14px; padding: 8px; font-size: 16px; }
+    button { width: 100%; padding: 10px; background: #2563eb; color: white; border: 0; border-radius: 6px; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <form id="login">
+    <h2>Iniciar sesión</h2>
+    <label>Usuario <input name="username" autocomplete="username" value="demo"></label>
+    <label>Contraseña <input name="password" type="password" value="demo"></label>
+    <button type="submit">Continuar</button>
+  </form>
+
+  <script>
+    // Paso 2: el formulario del código aparece tras el login (como en una SPA).
+    const split = new URLSearchParams(location.search).has("split");
+    const codeInputs = split
+      ? `<div style="display:flex;gap:6px">${'<input class="digit" maxlength="1" inputmode="numeric" style="text-align:center">'.repeat(6)}</div>`
+      : `<label>Código <input id="otp" name="otp_code" inputmode="numeric" maxlength="6" autocomplete="off"></label>`;
+
+    document.getElementById("login").addEventListener("submit", (event) => {
+      event.preventDefault();
+      event.target.outerHTML = `
+        <form id="mfa">
+          <h2>Verificación en dos pasos</h2>
+          <p>Introduce el código de tu app de autenticación.</p>
+          ${codeInputs}
+          <button type="submit">Verificar</button>
+        </form>`;
+      document.getElementById("mfa").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const code = [...e.target.querySelectorAll("input")].map((i) => i.value).join("");
+        e.target.outerHTML = `<div class="done" id="result"><h2>✔ Código enviado</h2><p>Código recibido: <b id="received">${code}</b></p></div>`;
+      });
+    });
+  </script>
+</body>
+</html>
