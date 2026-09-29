@@ -24,5 +24,8 @@ pkill -f "python3 -m totp_autofill\$" 2>/dev/null || true
 rm -rf "$PREFIX"
 rm -f "$HOME/.local/bin/totp-autofill" \
       "$DATA/applications/totp-autofill.desktop" \
+      "$DATA/applications/io.github.tinogm97.TotpAutofill.desktop" \
+      "$DATA"/icons/hicolor/*/apps/totp-autofill.png \
+      "$DATA/icons/hicolor/scalable/apps/totp-autofill.svg" \
       "$DATA/icons/hicolor/256x256/apps/totp-autofill.png"
 echo "TOTP Autofill desinstalado. Recuerda quitar la extensión del navegador."

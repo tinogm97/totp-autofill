@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango  # noqa: E402
 
 from . import __version__  # noqa: E402
 from .store import Account, AccountStore  # noqa: E402
 from .totp import InvalidSecretError, parse_otpauth_uri  # noqa: E402
 
 APP_TITLE = "TOTP Autofill"
+APP_ID = "io.github.tinogm97.TotpAutofill"
+# Nombre de programa y clase de ventana (WM_CLASS). Deben coincidir con
+# StartupWMClass del .desktop para que el dock asocie la ventana a su icono.
+PROGRAM_NAME = "totp-autofill"
+ICONS_DIR = Path(__file__).parent / "icons"
 
 CSS = b"""
 .code { font-family: monospace; font-size: 22px; font-weight: bold; }
@@ -186,9 +192,6 @@ class MainWindow(Gtk.ApplicationWindow):
         super().__init__(application=app, title=APP_TITLE)
         self.store = store
         self.set_default_size(640, 420)
-        self.set_icon_name(
-            "totp-autofill" if Gtk.IconTheme.get_default().has_icon("totp-autofill")
-            else "dialog-password")
         # id -> (contador TOTP, código o error de ese periodo)
         self._codes: dict[str, tuple[int, str | Exception]] = {}
 
@@ -307,7 +310,7 @@ class MainWindow(Gtk.ApplicationWindow):
     def _about(self, _button) -> None:
         dialog = Gtk.AboutDialog(
             transient_for=self, modal=True, program_name=APP_TITLE,
-            version=__version__, logo_icon_name=self.get_icon_name(),
+            version=__version__, logo=_logo(),
             comments="Rellena automáticamente los códigos 2FA (TOTP) en los "
                      "formularios web que configures.",
             website="https://github.com/tinogm97/totp-autofill",
@@ -318,7 +321,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
 class App(Gtk.Application):
     def __init__(self) -> None:
-        super().__init__(application_id="io.github.tinogm97.TotpAutofill")
+        super().__init__(application_id=APP_ID)
         self.window: MainWindow | None = None
 
     def do_activate(self) -> None:
@@ -333,6 +336,29 @@ class App(Gtk.Application):
         self.window.present()
 
 
+def _set_default_icon() -> None:
+    """Icono de todas las ventanas, cargado del paquete.
+
+    No se usa el tema de iconos porque su caché puede no incluir el icono
+    recién instalado, y entonces GTK mostraría uno genérico.
+    """
+    pixbufs = [GdkPixbuf.Pixbuf.new_from_file(str(path))
+               for size in (16, 24, 32, 48, 64, 128, 256)
+               if (path := ICONS_DIR / f"{PROGRAM_NAME}-{size}.png").exists()]
+    if pixbufs:
+        Gtk.Window.set_default_icon_list(pixbufs)
+    else:
+        Gtk.Window.set_default_icon_name("dialog-password")
+
+
+def _logo() -> GdkPixbuf.Pixbuf | None:
+    path = ICONS_DIR / f"{PROGRAM_NAME}-128.png"
+    return GdkPixbuf.Pixbuf.new_from_file(str(path)) if path.exists() else None
+
+
 def run() -> int:
-    GLib.set_prgname("totp-autofill")  # coincide con StartupWMClass del .desktop
+    GLib.set_prgname(PROGRAM_NAME)
+    GLib.set_application_name(APP_TITLE)
+    Gdk.set_program_class(PROGRAM_NAME)
+    _set_default_icon()
     return App().run([])

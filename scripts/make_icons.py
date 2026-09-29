@@ -1,4 +1,8 @@
-"""Genera los iconos PNG de la extensión y de la app (requiere pycairo).
+"""Genera los iconos de la app y de la extensión (requiere pycairo).
+
+- ``totp_autofill/icons/``: PNG de 16 a 512 px y SVG escalable. Van dentro del
+  paquete para que la ventana los cargue sin depender del tema de iconos.
+- ``extension/icons/``: PNG de 16, 32, 48 y 128 px.
 
 Uso: python3 scripts/make_icons.py
 """
@@ -9,13 +13,12 @@ from pathlib import Path
 import cairo
 
 ROOT = Path(__file__).resolve().parent.parent
+APP_SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
+EXTENSION_SIZES = (16, 32, 48, 128)
 
 
-def draw(size: int, target: Path) -> None:
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
-    ctx = cairo.Context(surface)
-    s = size
-
+def draw(ctx: cairo.Context, s: float) -> None:
+    """Dibuja el icono en un lienzo de ``s`` x ``s``."""
     # Fondo: cuadrado redondeado azul.
     r = s * 0.22
     ctx.new_sub_path()
@@ -45,11 +48,25 @@ def draw(size: int, target: Path) -> None:
     ctx.move_to(s / 2 - ext.width / 2 - ext.x_bearing, s / 2 - ext.height / 2 - ext.y_bearing)
     ctx.show_text("2FA")
 
+
+def png(size: int, target: Path) -> None:
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+    draw(cairo.Context(surface), size)
     surface.write_to_png(str(target))
 
 
+def svg(target: Path, size: int = 128) -> None:
+    surface = cairo.SVGSurface(str(target), size, size)
+    draw(cairo.Context(surface), size)
+    surface.finish()
+
+
 if __name__ == "__main__":
-    for size in (16, 32, 48, 128):
-        draw(size, ROOT / "extension" / "icons" / f"icon-{size}.png")
-    draw(256, ROOT / "data" / "totp-autofill.png")
+    app_dir = ROOT / "totp_autofill" / "icons"
+    app_dir.mkdir(exist_ok=True)
+    for size in APP_SIZES:
+        png(size, app_dir / f"totp-autofill-{size}.png")
+    svg(app_dir / "totp-autofill.svg")
+    for size in EXTENSION_SIZES:
+        png(size, ROOT / "extension" / "icons" / f"icon-{size}.png")
     print("Iconos generados.")

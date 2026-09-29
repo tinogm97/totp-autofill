@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1 — 2026-09-29
+
+- **Icono de la app**: la ventana se identificaba como `__main__.py` y usaba
+  un icono genérico, así que el dock no mostraba el de la app. Ahora fija su
+  clase de ventana (`totp-autofill`), carga el icono del propio paquete, el
+  `.desktop` se llama como el application_id y se instalan todos los tamaños
+  (16–512 px y SVG), regenerando la caché de iconos si existe.
+
 ## 1.2.0 — 2026-09-29
 
 - **Instalador remoto** `get.sh`: instala o actualiza con

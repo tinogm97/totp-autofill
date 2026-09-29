@@ -11,7 +11,8 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/totp-autofill"
 BIN_DIR="$HOME/.local/bin"
 APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps"
+ICON_THEME="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
+DESKTOP_ID="io.github.tinogm97.TotpAutofill"  # = application_id de la app GTK
 
 echo "==> Comprobando dependencias"
 if ! python3 - <<'PY' 2>/dev/null
@@ -30,7 +31,7 @@ echo "==> Copiando la aplicación en $PREFIX"
 # Si la app está abierta, se cierra para que la próxima vez use el código nuevo.
 pkill -f "python3 -m totp_autofill\$" 2>/dev/null && echo "    (app abierta cerrada; vuelve a abrirla)" || true
 rm -rf "$PREFIX/totp_autofill" "$PREFIX/extension"
-mkdir -p "$PREFIX" "$BIN_DIR" "$APPS_DIR" "$ICON_DIR"
+mkdir -p "$PREFIX" "$BIN_DIR" "$APPS_DIR"
 cp -r "$SRC/totp_autofill" "$SRC/extension" "$PREFIX/"
 cp "$SRC/uninstall.sh" "$PREFIX/uninstall.sh"
 chmod 755 "$PREFIX/uninstall.sh"
@@ -52,11 +53,24 @@ SH
 chmod 755 "$BIN_DIR/totp-autofill"
 
 echo "==> Añadiendo lanzador al menú de aplicaciones"
-cp "$SRC/data/totp-autofill.png" "$ICON_DIR/totp-autofill.png"
+for png in "$SRC"/totp_autofill/icons/totp-autofill-*.png; do
+  size="${png##*-}"; size="${size%.png}"
+  install -Dm644 "$png" "$ICON_THEME/${size}x${size}/apps/totp-autofill.png"
+done
+install -Dm644 "$SRC/totp_autofill/icons/totp-autofill.svg" \
+  "$ICON_THEME/scalable/apps/totp-autofill.svg"
+# El .desktop se llama como el application_id para que GNOME asocie la
+# ventana con su lanzador (y su icono) en el dock.
+rm -f "$APPS_DIR/totp-autofill.desktop"  # nombre usado hasta la v1.2
 sed "s|@BIN@|$BIN_DIR/totp-autofill|" "$SRC/data/totp-autofill.desktop" \
-  > "$APPS_DIR/totp-autofill.desktop"
+  > "$APPS_DIR/$DESKTOP_ID.desktop"
 update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
-gtk-update-icon-cache -q "${ICON_DIR%/256x256/apps}" >/dev/null 2>&1 || true
+# Si existe una caché de iconos (p. ej. creada por Chrome), hay que
+# regenerarla o GTK no verá el icono nuevo. -t: no exige index.theme.
+if [ -f "$ICON_THEME/icon-theme.cache" ]; then
+  gtk-update-icon-cache -f -t -q "$ICON_THEME" >/dev/null 2>&1 || \
+    rm -f "$ICON_THEME/icon-theme.cache"
+fi
 
 echo "==> Registrando el host nativo en los navegadores"
 "$BIN_DIR/totp-autofill" install-browser --host-path "$PREFIX/totp-autofill-host" || \
