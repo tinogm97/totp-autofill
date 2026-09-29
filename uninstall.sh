@@ -20,6 +20,7 @@ PY
   "$HOME/.local/bin/totp-autofill" uninstall-browser
 fi
 
+pkill -f "python3 -m totp_autofill\$" 2>/dev/null || true
 rm -rf "$PREFIX"
 rm -f "$HOME/.local/bin/totp-autofill" \
       "$DATA/applications/totp-autofill.desktop" \

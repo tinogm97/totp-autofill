@@ -27,10 +27,16 @@ then
 fi
 
 echo "==> Copiando la aplicación en $PREFIX"
+# Si la app está abierta, se cierra para que la próxima vez use el código nuevo.
+pkill -f "python3 -m totp_autofill\$" 2>/dev/null && echo "    (app abierta cerrada; vuelve a abrirla)" || true
 rm -rf "$PREFIX/totp_autofill" "$PREFIX/extension"
 mkdir -p "$PREFIX" "$BIN_DIR" "$APPS_DIR" "$ICON_DIR"
 cp -r "$SRC/totp_autofill" "$SRC/extension" "$PREFIX/"
+cp "$SRC/uninstall.sh" "$PREFIX/uninstall.sh"
+chmod 755 "$PREFIX/uninstall.sh"
 find "$PREFIX" -name '__pycache__' -type d -prune -exec rm -rf {} +
+PYTHONPATH="$PREFIX" python3 -c "import totp_autofill; print(totp_autofill.__version__)" \
+  > "$PREFIX/VERSION"
 
 cat > "$PREFIX/totp-autofill-host" <<SH
 #!/bin/sh
@@ -62,7 +68,8 @@ Instalación completada.
 
 Siguiente paso: carga la extensión en tu navegador desde
   $PREFIX/extension
-(ver README.md, sección «Instalar la extensión»).
+(instrucciones: https://github.com/tinogm97/totp-autofill#instalar-la-extensión).
 
 Abre la app desde el menú («TOTP Autofill») o con: totp-autofill
+Para desinstalar: $PREFIX/uninstall.sh
 MSG

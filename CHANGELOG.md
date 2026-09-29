@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0 — 2026-09-29
+
+- **Instalador remoto** `get.sh`: instala o actualiza con
+  `curl -fsSL https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh | bash`,
+  sin clonar el repositorio. Admite `--version`, `--main`, `--uninstall` y
+  `--purge`.
+- `install.sh` deja el desinstalador y un fichero `VERSION` en
+  `~/.local/share/totp-autofill/`, y cierra la app si estaba abierta para
+  que se reabra con la versión nueva.
+
 ## 1.1.1 — 2026-09-29
 
 - El instalador registra el host también en navegadores Chromium lanzados

@@ -19,3 +19,14 @@ jobs:
         run: node tests/url_matches_parity.mjs
       - name: Sintaxis de la extensión
         run: for f in extension/*.js; do node --check "$f"; done
+      - name: Sintaxis de los scripts
+        run: for f in get.sh install.sh uninstall.sh tests/e2e/run.sh; do bash -n "$f"; done
+      - name: Instalador de principio a fin (HOME temporal)
+        run: |
+          sudo apt-get install -y -qq python3-gi gir1.2-gtk-3.0 gir1.2-secret-1 >/dev/null
+          export HOME="$(mktemp -d)" && mkdir -p "$HOME/.config/google-chrome"
+          PATH=/usr/bin:$PATH ./install.sh
+          test -x "$HOME/.local/bin/totp-autofill"
+          test -f "$HOME/.config/google-chrome/NativeMessagingHosts/com.github.tinogm97.totp_autofill.json"
+          "$HOME/.local/share/totp-autofill/uninstall.sh"
+          test ! -e "$HOME/.local/share/totp-autofill"

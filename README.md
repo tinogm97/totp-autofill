@@ -93,24 +93,46 @@ Más detalle en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
 ## Instalación
 
+Con un solo comando, sin clonar el repositorio:
+
 ```bash
-git clone https://github.com/tinogm97/totp-autofill.git
-cd totp-autofill
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh | bash
 ```
 
-El script **no necesita `sudo`**. Instala todo en tu usuario:
+Descarga la última versión publicada, la instala y borra los ficheros
+temporales. **Volver a ejecutarlo actualiza** a la última versión (después,
+recarga la extensión en `chrome://extensions` con ↻).
+
+<details>
+<summary>Otras opciones del instalador</summary>
+
+```bash
+# Una versión concreta, o la rama main (en desarrollo)
+curl -fsSL https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh | bash -s -- --version v1.2.0
+curl -fsSL https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh | bash -s -- --main
+
+# Revisar el script antes de ejecutarlo
+curl -fsSLO https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh
+less get.sh && bash get.sh
+
+# Desde una copia del repositorio
+git clone https://github.com/tinogm97/totp-autofill.git && cd totp-autofill && ./install.sh
+```
+
+</details>
+
+Ni el instalador ni la app **necesitan `sudo`**. Todo se instala en tu usuario:
 
 | Qué | Dónde |
 |---|---|
-| App y extensión | `~/.local/share/totp-autofill/` |
+| App, extensión y desinstalador | `~/.local/share/totp-autofill/` |
 | Comando `totp-autofill` | `~/.local/bin/totp-autofill` |
 | Lanzador del menú | `~/.local/share/applications/totp-autofill.desktop` |
 | Registro del host nativo | `~/.config/google-chrome/NativeMessagingHosts/`, `~/.mozilla/native-messaging-hosts/` y la carpeta de cualquier Chrome con `--user-data-dir` en `~/.config` |
 
 > El host solo se registra en los navegadores que hayas abierto al menos una
 > vez (tiene que existir su carpeta de configuración). Si instalas un
-> navegador después, vuelve a ejecutar `./install.sh`.
+> navegador después, vuelve a ejecutar el instalador.
 
 ## Instalar la extensión
 
@@ -319,7 +341,7 @@ totp-autofill uninstall-browser
 ## Solución de problemas
 
 **El popup dice "Specified native messaging host not found".**
-Vuelve a ejecutar `./install.sh` con el navegador ya abierto alguna vez, y
+Vuelve a ejecutar el instalador con el navegador ya abierto alguna vez, y
 reinicia el navegador por completo. Comprueba que existe el fichero
 `~/.config/google-chrome/NativeMessagingHosts/com.github.tinogm97.totp_autofill.json`.
 
@@ -383,7 +405,8 @@ totp-autofill/
 ├── tests/                     # unitarios, paridad JS↔Python, e2e
 ├── data/                      # icono y .desktop
 ├── scripts/make_icons.py      # generación de iconos
-├── install.sh / uninstall.sh
+├── get.sh                     # instalador remoto (curl | bash)
+├── install.sh / uninstall.sh  # instalación desde una copia local
 └── docs/ARQUITECTURA.md
 ```
 
@@ -424,9 +447,11 @@ del todo: solo se ejecuta una instancia).
 ## Desinstalar
 
 ```bash
-./uninstall.sh           # quita la app; conserva cuentas y secretos
-./uninstall.sh --purge   # además borra cuentas y secretos del llavero
+~/.local/share/totp-autofill/uninstall.sh           # quita la app; conserva cuentas y secretos
+~/.local/share/totp-autofill/uninstall.sh --purge   # además borra cuentas y secretos del llavero
 ```
+
+(o con el instalador remoto: `curl -fsSL …/get.sh | bash -s -- --uninstall`)
 
 Después quita la extensión del navegador.
 
