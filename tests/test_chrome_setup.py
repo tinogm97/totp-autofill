@@ -49,6 +49,21 @@ class ChromeSetupTest(unittest.TestCase):
         chrome_setup.disable(self.user, self.backups)
         self.assertEqual((self.user / "google-chrome.desktop").read_text(), own)
 
+    def test_firefox_snap_and_deb(self):
+        snap = ("[Desktop Entry]\nName=Firefox\nExec=env BAMF_DESKTOP_FILE_HINT=/var/lib/snapd/"
+                "desktop/applications/firefox_firefox.desktop /snap/bin/firefox %u\n")
+        (self.system / "firefox_firefox.desktop").write_text(snap)
+        (self.system / "firefox.desktop").write_text("[Desktop Entry]\nExec=firefox %u\n")
+        chrome_setup.enable(self.user, [self.system], self.backups)
+        self.assertIn("Exec=env GNOME_ACCESSIBILITY=1 BAMF_DESKTOP_FILE_HINT=",
+                      (self.user / "firefox_firefox.desktop").read_text())
+        deb = (self.user / "firefox.desktop").read_text()
+        self.assertIn("Exec=env GNOME_ACCESSIBILITY=1 firefox %u", deb)
+        self.assertNotIn(FLAG, deb)  # el flag de Chrome no aplica a Firefox
+        self.assertTrue(chrome_setup.is_enabled(self.user))
+        chrome_setup.disable(self.user, self.backups)
+        self.assertFalse((self.user / "firefox_firefox.desktop").exists())
+
     def test_add_flag_respects_env_and_quotes(self):
         cases = {
             "Exec=env FOO=1 /usr/bin/google-chrome %U":
@@ -79,13 +94,16 @@ class ChromeSetupTest(unittest.TestCase):
             "11": ["/opt/google/chrome/chrome", "--type=renderer"],
             "12": ["/opt/google/chrome/chrome", "--user-data-dir=/home/t/.config/vpn", FLAG],
             "13": ["/usr/bin/python3"],
+            "20": ["/snap/firefox/6000/usr/lib/firefox/firefox"],
+            "21": ["/snap/firefox/6000/usr/lib/firefox/firefox", "-contentproc", "tab"],
         }.items():
             (proc / pid).mkdir(parents=True)
             (proc / pid / "cmdline").write_bytes(b"\0".join(a.encode() for a in args) + b"\0")
+            (proc / pid / "environ").write_bytes(b"HOME=/h\0GNOME_ACCESSIBILITY=1\0")
         (proc / "self").mkdir()
         found = sorted(chrome_setup.running_browsers(proc), key=lambda p: p.pid)
         self.assertEqual([(p.pid, p.accessible, p.user_data_dir) for p in found],
-                         [(10, False, ""), (12, True, "/home/t/.config/vpn")])
+                         [(10, False, ""), (12, True, "/home/t/.config/vpn"), (20, True, "")])
 
 
 if __name__ == "__main__":

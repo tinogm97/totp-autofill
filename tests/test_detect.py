@@ -24,6 +24,10 @@ class OtpDetectionTest(unittest.TestCase):
     def test_weak(self):
         self.assertEqual(otp_confidence(field(maxlength=6)), 1)
         self.assertEqual(otp_confidence(field(maxlength=1, css_class="digit")), 1)
+        # Firefox no expone maxlength: se reconoce el grupo de 6 cajas.
+        self.assertEqual(otp_confidence(field(css_class="digit"), group_size=6), 1)
+        self.assertEqual(otp_confidence(field(css_class="digit"), group_size=2), 0)
+        self.assertEqual(otp_confidence(field(label="Nombre"), group_size=6), 0)
 
     def test_not_otp(self):
         for info in (

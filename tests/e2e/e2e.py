@@ -27,7 +27,9 @@ from totp_autofill.store import AccountStore, Settings  # noqa: E402
 from totp_autofill.totp import seconds_remaining, totp  # noqa: E402
 from totp_autofill.x11 import X11  # noqa: E402
 
-CHROME = os.environ["CHROME"]
+CHROME = os.environ["CHROME"]  # ejecutable del navegador (Chrome, Chromium, Brave o Firefox)
+KIND = os.environ.get("BROWSER_KIND", "chromium")  # "chromium" o "firefox"
+BROWSER_APPS = ("hrom", "Brave", "Firefox")  # nombres de app en AT-SPI
 PORT = 8765
 DEMO = f"http://localhost:{PORT}/demo-2fa.html"
 S_ANA, S_LUIS, S_OTRA = "JBSWY3DPEHPK3PXP", "GEZDGNBVGY3TQOJQ", "MFRGGZDFMZTWQ2LK"
@@ -69,13 +71,13 @@ def document(timeout=15.0):
         desktop = Atspi.get_desktop(0)
         for i in range(desktop.get_child_count()):
             app = desktop.get_child_at_index(i)
-            if app is None or "hrom" not in (app.get_name() or ""):
+            if app is None or not any(b in (app.get_name() or "") for b in BROWSER_APPS):
                 continue
             doc = find(app, lambda n: n.get_role_name() == "document web")
             if doc is not None:
                 return doc
         time.sleep(0.3)
-    raise TimeoutError("Chromium no expone la página por accesibilidad")
+    raise TimeoutError("El navegador no expone la página por accesibilidad")
 
 
 def element(role: str, name: str, timeout=10.0):
@@ -90,8 +92,10 @@ def element(role: str, name: str, timeout=10.0):
 
 
 def click(node) -> None:
-    rect = node.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
-    x11.click(rect.x + rect.width // 2, rect.y + rect.height // 2)
+    from totp_autofill.a11y import extents  # reintenta si Firefox aún no la sabe
+
+    x, y, width, height = extents(node)
+    x11.click(x + width // 2, y + height // 2)
     time.sleep(0.4)
 
 
@@ -115,19 +119,13 @@ def received(timeout=12.0) -> str:
 
 class Browser:
     def __init__(self, query: str = "") -> None:
-        profile = WORK / "profile"
-        # Sin la burbuja de "¿Traducir?": roba el foco del teclado a la página.
-        (profile / "Default").mkdir(parents=True, exist_ok=True)
-        prefs = profile / "Default" / "Preferences"
-        if not prefs.exists():
-            prefs.write_text('{"translate": {"enabled": false}, '
-                             '"intl": {"accept_languages": "es-ES,es"}}')
-        self.proc = subprocess.Popen(
-            [CHROME, "--no-sandbox", "--no-first-run", "--no-default-browser-check",
-             "--password-store=basic", "--lang=es-ES",
-             "--force-renderer-accessibility", f"--user-data-dir={profile}",
-             "--window-position=0,0", "--window-size=1200,850", DEMO + query],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        profile = WORK / f"profile-{KIND}"
+        if KIND == "firefox":
+            command, env = self._firefox(profile), {**os.environ, "GNOME_ACCESSIBILITY": "1"}
+        else:
+            command, env = self._chromium(profile), os.environ
+        self.proc = subprocess.Popen(command + [DEMO + query], env=env,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         element("entry", "Email", timeout=25)
         # En Xvfb no hay gestor de ventanas que dé el foco al hacer clic, y
         # Chrome solo emite eventos de foco si su ventana lo tiene.
@@ -135,6 +133,41 @@ class Browser:
         if windows:
             x11.activate(windows[-1])
             time.sleep(0.3)
+
+    @staticmethod
+    def _chromium(profile: Path) -> list[str]:
+        # Sin la burbuja de "¿Traducir?": roba el foco del teclado a la página.
+        (profile / "Default").mkdir(parents=True, exist_ok=True)
+        prefs = profile / "Default" / "Preferences"
+        if not prefs.exists():
+            prefs.write_text('{"translate": {"enabled": false}, '
+                             '"intl": {"accept_languages": "es-ES,es"}}')
+        return [CHROME, "--no-sandbox", "--no-first-run", "--no-default-browser-check",
+                "--password-store=basic", "--lang=es-ES", "--force-renderer-accessibility",
+                f"--user-data-dir={profile}", "--window-position=0,0", "--window-size=1200,850"]
+
+    @staticmethod
+    def _firefox(profile: Path) -> list[str]:
+        # Firefox expone las páginas por accesibilidad con GNOME_ACCESSIBILITY=1
+        # (ver env en __init__). Aquí solo se quitan las pantallas de bienvenida.
+        profile.mkdir(parents=True, exist_ok=True)
+        prefs = {
+            "browser.aboutwelcome.enabled": "false", "browser.preonboarding.enabled": "false",
+            "termsofuse.bypassNotification": "true", "termsofuse.acceptedVersion": "999",
+            "termsofuse.acceptedDate": '"1735689600000"',
+            "trailhead.firstrun.didSeeAboutWelcome": "true",
+            "datareporting.policy.dataSubmissionPolicyBypassNotification": "true",
+            "datareporting.policy.dataSubmissionEnabled": "false",
+            "browser.startup.homepage_override.mstone": '"ignore"',
+            "browser.shell.checkDefaultBrowser": "false",
+            "browser.sessionstore.resume_from_crash": "false",
+            "browser.translations.automaticallyPopup": "false",
+            "signon.rememberSignons": "false",
+        }
+        (profile / "user.js").write_text(
+            "".join(f'user_pref("{k}", {v});\n' for k, v in prefs.items()))
+        return [CHROME, "-no-remote", "-profile", str(profile), "-width", "1200",
+                "-height", "850"]
 
     def login(self, email: str) -> None:
         click(element("entry", "Email"))

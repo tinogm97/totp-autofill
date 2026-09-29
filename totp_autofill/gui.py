@@ -200,7 +200,7 @@ class PreferencesDialog(Gtk.Dialog):
         self._refresh_shortcut()
 
         # -- navegadores
-        box.add(self._heading("Accesibilidad en Chrome / Chromium"))
+        box.add(self._heading("Accesibilidad en los navegadores (Chrome, Brave, Edge, Firefox…)"))
         self.chrome_status = _small("")
         box.add(self.chrome_status)
         self.chrome_button = Gtk.Button(halign=Gtk.Align.START)
@@ -247,8 +247,8 @@ class PreferencesDialog(Gtk.Dialog):
 
     def _refresh_chrome(self) -> None:
         enabled = chrome_setup.is_enabled()
-        lines = [("✔ El lanzador de Chrome arranca con accesibilidad." if enabled else
-                  "✘ Chrome arranca sin accesibilidad: el modo automático no funciona "
+        lines = [("✔ Los lanzadores de tus navegadores arrancan con accesibilidad." if enabled else
+                  "✘ Los navegadores arrancan sin accesibilidad: el modo automático no funciona "
                   "(el atajo sí).")]
         for proc in chrome_setup.running_browsers():
             where = f" ({GLib.markup_escape_text(proc.user_data_dir)})" if proc.user_data_dir else ""
@@ -258,7 +258,8 @@ class PreferencesDialog(Gtk.Dialog):
                 lines.append(f"⚠ {proc.exe}{where}: abierto sin accesibilidad; ciérralo del "
                              "todo y ábrelo otra vez.")
         self.chrome_status.set_markup("<small>" + "\n".join(lines) + "</small>")
-        self.chrome_button.set_label("Desactivar en Chrome" if enabled else "Activar en Chrome")
+        self.chrome_button.set_label("Desactivar en los navegadores" if enabled
+                                     else "Activar en los navegadores")
 
         for child in self.vpn_box.get_children():
             self.vpn_box.remove(child)
@@ -414,9 +415,9 @@ class MainWindow(Gtk.ApplicationWindow):
         elif any(p.accessible for p in chrome_setup.running_browsers()):
             parts.append("Automático: activo")
         elif chrome_setup.is_enabled():
-            parts.append("Automático: reinicia Chrome para activarlo")
+            parts.append("Automático: reinicia el navegador para activarlo")
         else:
-            parts.append("⚠ Automático: Chrome sin accesibilidad")
+            parts.append("⚠ Automático: navegador sin accesibilidad")
         self.status.set_markup("<small>" + "  ·  ".join(parts) +
                                "  ·  <u>Preferencias</u></small>")
         return True

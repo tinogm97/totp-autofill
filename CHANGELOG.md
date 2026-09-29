@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.2.0 — 2026-09-29
+
+- **Firefox** (deb y snap) en modo automático: el lanzador añade
+  `GNOME_ACCESSIBILITY=1`; se lee la URL con `DocURL`, se reintenta ante la
+  caché perezosa de accesibilidad de Firefox y se reconocen las cajas de un
+  dígito sin depender de `maxlength`.
+- **Brave**, Edge y Vivaldi comprobados con el mismo lanzador que Chrome.
+- Pruebas end-to-end completas (8/8) con Chrome 154, Brave 1.96 y Firefox
+  156; CI con Chrome y Firefox.
+- `status` y Preferencias muestran todos los navegadores, no solo Chrome.
+
 ## 2.1.1 — 2026-09-29
 
 - Vídeo demo (`docs/demo.mp4`, 1 min) y GIF en el README; se regenera con

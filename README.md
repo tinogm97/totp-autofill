@@ -39,7 +39,7 @@ También en [vídeo MP4](docs/demo.mp4).</sub>
 2. [Primeros pasos](#primeros-pasos)
 3. [Importar desde Google Authenticator](#importar-desde-google-authenticator)
 4. [Cómo elige la cuenta](#cómo-elige-la-cuenta)
-5. [Modo automático y Chrome](#modo-automático-y-chrome)
+5. [Modo automático y navegadores](#modo-automático-y-navegadores)
 6. [El atajo de teclado](#el-atajo-de-teclado)
 7. [Línea de comandos](#línea-de-comandos)
 8. [Seguridad](#seguridad)
@@ -66,7 +66,7 @@ Volver a ejecutarlo **actualiza** a la última versión. El instalador:
 | Añade la app al menú de aplicaciones | `~/.local/share/applications/` |
 | Arranca el proceso en segundo plano y lo añade al inicio de sesión | `~/.config/autostart/` |
 | Registra el atajo **`Ctrl+Alt+2`** (GNOME) | Ajustes → Teclado → Atajos personalizados |
-| Crea un lanzador de Chrome con accesibilidad (para el modo automático) | `~/.local/share/applications/google-chrome.desktop` |
+| Crea lanzadores de tus navegadores con accesibilidad (para el modo automático) | `~/.local/share/applications/` (Chrome, Brave, Firefox…) |
 
 Si no quieres alguna de las dos últimas cosas:
 `… | bash -s -- --no-shortcut` o `--no-chrome` (o desde un clon:
@@ -143,7 +143,7 @@ Abre **TOTP Autofill** desde el menú y pulsa **+**:
 
 ### 3. Úsala
 
-- **Con Chrome reiniciado** (ver [modo automático](#modo-automático-y-chrome)):
+- **Con el navegador reiniciado** (ver [modo automático](#modo-automático-y-navegadores)):
   entra en la página del código. Se escribe solo o, si es la primera vez en ese
   sitio, te pregunta qué cuenta es:
 
@@ -215,14 +215,21 @@ esa cuenta. Si entras con un email que no es de ninguna cuenta, pregunta.
 > **solo lo recuerda si coincide con una cuenta configurada** y solo en memoria
 > (10 minutos). Nunca lee campos de contraseña.
 
-## Modo automático y Chrome
+## Modo automático y navegadores
 
 El modo automático usa la **accesibilidad** (AT-SPI, lo mismo que los lectores
-de pantalla) para saber en qué campo estás y en qué página. Chrome solo la
-activa si arranca con `--force-renderer-accessibility` **y** la variable
-`QT_ACCESSIBILITY=1`. El instalador crea un lanzador de Chrome para tu usuario
-con ambas cosas; **cierra Chrome del todo y vuelve a abrirlo** desde el menú o
-el dock.
+de pantalla) para saber en qué campo estás y en qué página. Los navegadores
+solo la activan si se lo pides al arrancar; el instalador crea, para tu
+usuario, lanzadores de los navegadores que tengas con lo necesario. **Cierra
+el navegador del todo y vuelve a abrirlo** desde el menú o el dock.
+
+| Navegador | Qué necesita (lo pone el lanzador) | Probado |
+|---|---|---|
+| Google Chrome, Chromium, Brave, Edge, Vivaldi | `--force-renderer-accessibility` y `QT_ACCESSIBILITY=1` | Chrome 154 y Brave 1.96: todas las pruebas end-to-end |
+| Firefox (deb o snap) | `GNOME_ACCESSIBILITY=1` | Firefox 156: todas las pruebas end-to-end |
+
+El **atajo `Ctrl+Alt+2`** funciona en cualquier navegador y aplicación, con o
+sin accesibilidad.
 
 También puedes activarlo o desactivarlo en **Preferencias**:
 
@@ -230,12 +237,12 @@ También puedes activarlo o desactivarlo en **Preferencias**:
 
 o con `totp-autofill setup-chrome` / `totp-autofill setup-chrome --undo`.
 
-**Chrome lanzado por un script** (p. ej. un Chrome aparte para la VPN con
+**Navegador lanzado por un script** (p. ej. un Chrome aparte para la VPN con
 `--user-data-dir`): hay que añadir el flag y la variable en ese script. Para
 `/usr/local/bin/chrome-vpn-session`, Preferencias y `totp-autofill status`
 muestran el comando exacto (`sudo sed …`).
 
-> La accesibilidad hace que Chrome gaste algo más de memoria y CPU. Si no
+> La accesibilidad hace que el navegador gaste algo más de memoria y CPU. Si no
 > quieres activarla, el **atajo** funciona igual sin ella (eligiendo por la
 > ventana en vez de por el sitio).
 
@@ -296,8 +303,9 @@ totp-autofill setup-shortcut [--binding '<Control><Alt>2' | --remove]
 Empieza siempre por `totp-autofill status`.
 
 **El modo automático no hace nada.**
-- `status` debe mostrar tu Chrome con ✔. Si sale ✘, ciérralo del todo (también
-  en segundo plano: `pkill chrome`) y ábrelo desde el menú.
+- `status` debe mostrar tu navegador con ✔. Si sale ✘, ciérralo del todo
+  (también en segundo plano: `pkill chrome`, `pkill brave` o `pkill firefox`) y
+  ábrelo desde el menú.
 - Mira qué detecta: `pkill -f "totp_autofill daemon"; totp-autofill daemon --debug`
   y entra en el campo. Deberías ver `foco en campo …` y `campo de código`.
 - Si el campo no parece de código (sin etiqueta ni `maxlength`), usa el atajo.
@@ -377,7 +385,10 @@ El **test end-to-end** abre un Chromium real con la página demo, arranca el
 daemon y maneja la página como una persona (clics y teclado) para comprobar
 que llega el código correcto: dos usuarios en el mismo sitio, 6 cajas,
 multipágina, selector, atajo con y sin daemon, aprendizaje por ventana y
-lectura de un QR de exportación con una cámara simulada. Se
+lectura de un QR de exportación con una cámara simulada. Vale para Chrome,
+Brave (`CHROME=/ruta/a/brave`) y Firefox
+(`BROWSER_KIND=firefox CHROME=/ruta/a/firefox`); en CI se ejecuta con Chrome y
+Firefox. Se
 ejecuta en una sesión aislada (Xvfb, D-Bus y accesibilidad propios, `HOME`
 temporal y secretos en un fichero temporal): no toca tu escritorio ni tu
 llavero. Necesita `xvfb`, `at-spi2-core` y un Chromium

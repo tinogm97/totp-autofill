@@ -15,6 +15,7 @@ instancia y la acción ``fill`` queda publicada en D-Bus.
 from __future__ import annotations
 
 import logging
+import os
 import time
 
 import gi
@@ -96,6 +97,8 @@ class Daemon:
 
     def _on_text(self, event) -> None:
         acc = event.source
+        if os.environ.get("TOTP_AUTOFILL_TRACE"):
+            log.debug("TRACE %s %s %r", event.type, a11y.role(acc), a11y.field_info(acc))
         # Nunca se leen contraseñas: solo campos que parecen de usuario/email.
         if a11y.role(acc) != "entry" or not is_user_field(a11y.field_info(acc)):
             return
@@ -196,6 +199,9 @@ class Daemon:
 
     def _on_focus(self, event) -> None:
         acc = event.source
+        if os.environ.get("TOTP_AUTOFILL_TRACE"):
+            log.debug("TRACE %s %s %s %r", event.type, event.detail1, a11y.role(acc),
+                      a11y.field_info(acc))
         if not a11y.is_entry(acc):
             return
         if event.detail1:  # ha ganado el foco
@@ -208,7 +214,7 @@ class Daemon:
         if time.monotonic() < self.busy_until or not a11y.is_focused(acc):
             return False
         info = a11y.field_info(acc)
-        confidence = otp_confidence(info)
+        confidence = otp_confidence(info, group_size=a11y.group_size(acc))
         if not confidence or a11y.field_text(acc):
             return False
         log.debug("campo de código (confianza %d)", confidence)

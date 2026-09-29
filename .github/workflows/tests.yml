@@ -29,6 +29,11 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox]
+    name: e2e (${{ matrix.browser }})
     steps:
       - uses: actions/checkout@v4
       - name: Dependencias del sistema
@@ -37,5 +42,16 @@ jobs:
           sudo apt-get install -y -qq python3-gi gir1.2-gtk-3.0 gir1.2-secret-1 \
             gir1.2-atspi-2.0 at-spi2-core libxtst6 xvfb dbus-x11 libzbar0 \
             gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-gtk3 gstreamer1.0-plugins-good >/dev/null
-      - name: Test end-to-end (Chrome real, sesión aislada)
-        run: CHROME="$(command -v google-chrome)" PATH=/usr/bin:/bin:/usr/local/bin tests/e2e/run.sh
+      - name: Firefox oficial de Mozilla
+        if: matrix.browser == 'firefox'
+        run: |
+          curl -sL -o /tmp/firefox.tar.xz "https://download.mozilla.org/?product=firefox-latest&os=linux64&lang=es-ES"
+          tar xf /tmp/firefox.tar.xz -C /tmp
+      - name: Test end-to-end (navegador real, sesión aislada)
+        run: |
+          if [ "${{ matrix.browser }}" = firefox ]; then
+            export BROWSER_KIND=firefox CHROME=/tmp/firefox/firefox
+          else
+            export CHROME="$(command -v google-chrome)"
+          fi
+          PATH=/usr/bin:/bin:/usr/local/bin tests/e2e/run.sh

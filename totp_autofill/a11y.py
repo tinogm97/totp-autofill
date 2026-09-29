@@ -8,6 +8,9 @@ teclea con XTest (``x11``).
 
 from __future__ import annotations
 
+import time
+import warnings
+
 import gi
 
 gi.require_version("Atspi", "2.0")
@@ -19,6 +22,10 @@ from .store import host_of  # noqa: E402
 ENTRY_ROLES = {"entry", "password text", "spin button"}
 TEXT_LIMIT = 20_000  # caracteres de la página que se leen, como mucho
 NODE_LIMIT = 3_000
+# Firefox rellena su caché de accesibilidad bajo demanda: la primera consulta
+# de atributos o posición de un campo devuelve vacío y la siguiente, ya bien.
+LAZY_RETRIES = 3
+LAZY_DELAY_S = 0.15
 
 
 def bus_available() -> bool:
@@ -58,9 +65,32 @@ def is_entry(acc: Atspi.Accessible) -> bool:
     return role(acc) in ENTRY_ROLES
 
 
+def _retry(fetch, valid):
+    """Repite ``fetch`` si el resultado no es válido (caché perezosa de Firefox)."""
+    result = fetch()
+    for _ in range(LAZY_RETRIES):
+        if valid(result):
+            break
+        time.sleep(LAZY_DELAY_S)
+        result = fetch()
+    return result
+
+
 def field_info(acc: Atspi.Accessible) -> FieldInfo:
-    return FieldInfo.from_atspi(_safe(acc.get_name, "") or "",
-                                _safe(acc.get_attributes, {}) or {})
+    attrs = _retry(lambda: _safe(acc.get_attributes, {}) or {}, bool)
+    return FieldInfo.from_atspi(_safe(acc.get_name, "") or "", attrs)
+
+
+def group_size(acc: Atspi.Accessible) -> int:
+    """Campos de texto hermanos (mismo contenedor), incluido este."""
+    parent = _safe(acc.get_parent)
+    if parent is None:
+        return 0
+    count = _safe(parent.get_child_count, 0) or 0
+    if count > 20:
+        return 0
+    children = (_safe(lambda i=i: parent.get_child_at_index(i)) for i in range(count))
+    return sum(1 for child in children if child is not None and role(child) == "entry")
 
 
 def field_text(acc: Atspi.Accessible) -> str:
@@ -88,8 +118,15 @@ def document_of(acc: Atspi.Accessible) -> Atspi.Accessible | None:
 
 
 def document_url(doc: Atspi.Accessible) -> str:
+    """URL de la página. Chrome la da en ``URI``; Firefox solo responde a la
+    consulta de un atributo suelto (``DocURL``), no a la de todos a la vez."""
     attrs = _safe(lambda: Atspi.Document.get_document_attributes(doc), {}) or {}
-    return attrs.get("URI") or attrs.get("DocURL") or ""
+    url = attrs.get("URI") or attrs.get("DocURL")
+    if not url:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            url = _safe(lambda: Atspi.Document.get_document_attribute_value(doc, "DocURL"))
+    return url or ""
 
 
 def document_host(doc: Atspi.Accessible | None) -> str:
@@ -120,8 +157,12 @@ def page_text(doc: Atspi.Accessible) -> str:
 
 def extents(acc: Atspi.Accessible) -> tuple[int, int, int, int] | None:
     """Posición del objeto en pantalla: ``(x, y, ancho, alto)``."""
-    rect = _safe(lambda: acc.get_component_iface().get_extents(Atspi.CoordType.SCREEN))
-    return (rect.x, rect.y, rect.width, rect.height) if rect else None
+    rect = _retry(
+        lambda: _safe(lambda: acc.get_component_iface().get_extents(Atspi.CoordType.SCREEN)),
+        lambda r: r is not None and r.width > 0 and r.height > 0)
+    if rect is None or rect.width <= 0 or rect.height <= 0:
+        return None  # sin posición: el selector se abre junto al ratón
+    return (rect.x, rect.y, rect.width, rect.height)
 
 
 def chrome_exposes_pages() -> list[str]:

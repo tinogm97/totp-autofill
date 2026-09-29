@@ -58,12 +58,16 @@ class FieldInfo:
         )
 
 
-def otp_confidence(info: FieldInfo, digits: int = 6) -> int:
+def otp_confidence(info: FieldInfo, digits: int = 6, group_size: int = 0) -> int:
     """¿Parece el campo del código 2FA? 0 = no, 1 = puede, 2 = casi seguro.
 
     Con 2 (``autocomplete=one-time-code`` o una etiqueta que habla de código)
     se puede preguntar qué cuenta usar; con 1 (solo por la longitud) solo se
     rellena si el sitio ya está asociado a una cuenta.
+
+    ``group_size`` es cuántos campos de texto hay junto a este en el mismo
+    contenedor: un grupo de 6-8 es el código "partido" en cajas aunque el
+    navegador no diga su ``maxlength`` (Firefox no lo expone).
     """
     if info.input_type not in TEXT_TYPES or info.input_type == "email":
         return 0
@@ -74,7 +78,11 @@ def otp_confidence(info: FieldInfo, digits: int = 6) -> int:
     if OTP_HINT.search(info.text):
         return 2 if info.maxlength in (0, 1) or info.maxlength >= digits else 0
     # Cajas de un dígito (código "partido") o campo de 6-8 caracteres.
-    return 1 if info.maxlength == 1 or info.maxlength in (6, 7, 8) else 0
+    if info.maxlength == 1 or info.maxlength in (6, 7, 8):
+        return 1
+    if group_size in (6, 7, 8) and info.maxlength == 0 and not info.label:
+        return 1
+    return 0
 
 
 def is_otp_field(info: FieldInfo, digits: int = 6) -> bool:

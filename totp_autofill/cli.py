@@ -160,9 +160,9 @@ def cmd_setup_chrome(args) -> int:
     for path in changed:
         print(f"Lanzador con accesibilidad: {path}")
     if not changed and not chrome_setup.is_enabled():
-        print("No se encontró ningún Chrome/Chromium instalado.", file=sys.stderr)
+        print("No se encontró ningún navegador compatible instalado.", file=sys.stderr)
         return 1
-    print("Cierra el navegador por completo y vuelve a abrirlo para que tenga efecto.")
+    print("Cierra los navegadores por completo y vuelve a abrirlos para que tenga efecto.")
     if fix := chrome_setup.vpn_script_fix():
         print(f"\nPara el Chrome VPN (necesita sudo):\n  {fix}")
     return 0
@@ -204,7 +204,7 @@ def cmd_status(_args) -> int:
     shortcut = keybinding.current()
     print(f"{ok(shortcut)} Atajo de teclado: {keybinding.label(shortcut) if shortcut else 'sin configurar'}")
 
-    print(f"{ok(chrome_setup.is_enabled())} Lanzador de Chrome con accesibilidad")
+    print(f"{ok(chrome_setup.is_enabled())} Lanzadores de los navegadores con accesibilidad")
     for proc in chrome_setup.running_browsers():
         where = f" ({proc.user_data_dir})" if proc.user_data_dir else ""
         print(f"   {ok(proc.accessible)} {proc.exe}{where}: "
@@ -270,7 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
     delete.set_defaults(func=cmd_delete)
 
     chrome = sub.add_parser("setup-chrome",
-                            help="activar la accesibilidad en Chrome (modo automático)")
+                            help="activar la accesibilidad en Chrome, Brave, Edge, Firefox… (modo automático)")
     chrome.add_argument("--undo", action="store_true", help="deshacer")
     chrome.set_defaults(func=cmd_setup_chrome)
 

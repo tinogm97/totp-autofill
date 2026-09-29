@@ -5,7 +5,7 @@
 #   - Añade el lanzador al menú de aplicaciones
 #   - Arranca el proceso en segundo plano y lo añade al inicio de sesión
 #   - Registra el atajo Ctrl+Alt+2 en GNOME            (--no-shortcut para omitirlo)
-#   - Crea un lanzador de Chrome con accesibilidad     (--no-chrome para omitirlo)
+#   - Lanzadores de Chrome/Brave/Firefox… con accesibilidad (--no-chrome para omitirlo)
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -120,7 +120,7 @@ if [ "$SETUP_SHORTCUT" = 1 ]; then
 fi
 
 if [ "$SETUP_CHROME" = 1 ]; then
-  echo "==> Accesibilidad en Chrome (para el modo automático)"
+  echo "==> Accesibilidad en los navegadores (para el modo automático)"
   "$BIN_DIR/totp-autofill" setup-chrome || true
 fi
 
@@ -129,7 +129,7 @@ cat <<MSG
 Instalación completada.
 
 - Atajo: pon el cursor en el campo del código y pulsa Ctrl+Alt+2.
-- Automático: reinicia Chrome por completo; al entrar en un campo de código
+- Automático: reinicia tu navegador por completo; al entrar en un campo de código
   se escribirá solo.
 - Añade tus cuentas en la app «TOTP Autofill» (menú de aplicaciones).
 - Comprueba que todo está listo con: totp-autofill status

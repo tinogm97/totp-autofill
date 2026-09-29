@@ -8,6 +8,7 @@
 # Requisitos: xvfb, dbus, at-spi2-core y un Chromium o Chrome.
 # Por defecto usa el último Chromium de Playwright (npx playwright install
 # chromium); otro navegador con: CHROME=/ruta/al/chrome tests/e2e/run.sh
+# Firefox: BROWSER_KIND=firefox CHROME=/ruta/a/firefox tests/e2e/run.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -35,10 +36,11 @@ trap 'rm -rf "$SANDBOX"' EXIT
 mkdir -p "$SANDBOX/home" "$SANDBOX/runtime"
 chmod 700 "$SANDBOX/runtime"
 env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" CHROME="$CHROME" \
+  BROWSER_KIND="${BROWSER_KIND:-chromium}" \
   HOME="$SANDBOX/home" XDG_RUNTIME_DIR="$SANDBOX/runtime" \
   XDG_CONFIG_HOME="$SANDBOX/home/.config" XDG_DATA_HOME="$SANDBOX/home/.local/share" \
   XDG_CACHE_HOME="$SANDBOX/home/.cache" XDG_SESSION_TYPE=x11 \
   QT_ACCESSIBILITY=1 GTK_MODULES=gail:atk-bridge \
-  TOTP_AUTOFILL_DEBUG="${TOTP_AUTOFILL_DEBUG:-}" \
+  TOTP_AUTOFILL_DEBUG="${TOTP_AUTOFILL_DEBUG:-}" TOTP_AUTOFILL_TRACE="${TOTP_AUTOFILL_TRACE:-}" \
   xvfb-run -a -s "-screen 0 1280x900x24" \
   dbus-run-session -- python3 "$ROOT/tests/e2e/e2e.py"

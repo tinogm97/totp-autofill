@@ -131,6 +131,18 @@ Comprobado en Chrome/Chromium 151–154 sobre Ubuntu 24.04 (X11):
 | `org.a11y.Status.ScreenReaderEnabled=true` | Sí, pero **arranca Orca** (lector de pantalla con voz): descartado |
 | `--force-renderer-accessibility` **y** `QT_ACCESSIBILITY=1` | **Sí** |
 
+Firefox 156 (deb y snap) expone las páginas con `GNOME_ACCESSIBILITY=1` (la
+variable pasa al confinamiento del snap, que tiene acceso al bus de
+accesibilidad por la interfaz `desktop`). Diferencias que el código cubre:
+
+- La URL no está en `GetAttributes` (Firefox no implementa ese método del
+  documento): se lee con `GetAttributeValue("DocURL")`.
+- **Caché perezosa**: la primera consulta de atributos o de la posición de un
+  campo devuelve vacío/`-1` y Firefox la rellena para la siguiente.
+  `a11y._retry` repite la consulta hasta 3 veces cada 150 ms.
+- No expone `maxlength`: las cajas de un dígito se reconocen como un grupo de
+  6-8 campos sin etiqueta en el mismo contenedor (`a11y.group_size`).
+
 Ubuntu define `QT_ACCESSIBILITY=1` en la sesión, pero no llega a navegadores
 lanzados con entorno limpio (p. ej. vía `pkexec`). `chrome_setup` crea un
 lanzador de usuario con `env QT_ACCESSIBILITY=1 … --force-renderer-accessibility`
