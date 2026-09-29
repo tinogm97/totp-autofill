@@ -89,6 +89,51 @@ def cmd_add(args) -> int:
     return 0
 
 
+def cmd_import(args) -> int:
+    from . import qr
+    from .migration import accounts_from_uris, find_uris, import_accounts, missing_batches
+
+    uris: list[str] = []
+    for source in args.sources:
+        if source == "-":
+            uris += find_uris(sys.stdin.read())
+        elif source.lower().startswith("otpauth"):
+            uris += find_uris(source)
+        else:
+            try:
+                with open(source, encoding="utf-8") as fh:
+                    uris += find_uris(fh.read())  # fichero de texto con enlaces
+                continue
+            except (UnicodeDecodeError, IsADirectoryError):
+                pass
+            found = qr.decode_file(source)  # imagen con QR
+            if not found:
+                print(f"Aviso: no se ve ningún QR en {source}", file=sys.stderr)
+            for code in found:
+                uris += find_uris(code)
+    if not uris:
+        print("No se encontró ninguna exportación ni enlace otpauth.", file=sys.stderr)
+        return 1
+
+    accounts, skipped, batches = accounts_from_uris(uris)
+    for reason in skipped:
+        print(f"No se importa: {reason}", file=sys.stderr)
+    if missing := missing_batches(batches):
+        print(f"Aviso: faltan los QR {', '.join(map(str, missing))} de la exportación.",
+              file=sys.stderr)
+    print(f"{len(accounts)} cuenta(s) encontradas:")
+    for account in accounts:
+        print(f"  {account.label}")
+    if not args.yes and input("¿Importarlas? [s/N] ").strip().lower() not in ("s", "si", "sí", "y"):
+        return 1
+    result = import_accounts(_store(), accounts)
+    print(f"Importadas: {len(result.imported)}. Ya las tenías: {len(result.existing)}.")
+    for error in result.errors:
+        print(f"Error: {error}", file=sys.stderr)
+    print("Si hiciste fotos o capturas de los QR, bórralas: contienen tus secretos.")
+    return 0 if not result.errors else 1
+
+
 def cmd_code(args) -> int:
     store = _store()
     code, remaining = store.code(_find(store, args.account))
@@ -205,6 +250,16 @@ def build_parser() -> argparse.ArgumentParser:
                      choices=["SHA1", "SHA256", "SHA512"])
     add.set_defaults(func=cmd_add)
 
+    imp = sub.add_parser(
+        "import", help="importar desde Google Authenticator (imágenes de los QR o enlaces)",
+        description="Importa cuentas desde la exportación de Google Authenticator "
+                    "(⋮ → Transferir cuentas → Exportar). Acepta imágenes de los QR, "
+                    "ficheros de texto y enlaces otpauth-migration:// u otpauth://; "
+                    "'-' lee de la entrada estándar. Para usar la cámara, abre la app.")
+    imp.add_argument("sources", nargs="+", metavar="FUENTE")
+    imp.add_argument("-y", "--yes", action="store_true", help="no pedir confirmación")
+    imp.set_defaults(func=cmd_import)
+
     code = sub.add_parser("code", help="mostrar el código actual de una cuenta")
     code.add_argument("account", help="nombre, usuario o id")
     code.add_argument("-q", "--quiet", action="store_true", help="solo el código")
@@ -233,6 +288,6 @@ def main(argv: list[str] | None = None) -> int:
     func = getattr(args, "func", cmd_gui)
     try:
         return func(args)
-    except (ValueError, LookupError, RuntimeError) as exc:
+    except (ValueError, LookupError, RuntimeError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

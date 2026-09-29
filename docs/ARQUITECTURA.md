@@ -152,6 +152,21 @@ ctypes sobre `libX11` y `libXtst`, sin dependencias:
 - `activate()`: `_NET_ACTIVE_WINDOW` (EWMH) o, sin gestor de ventanas,
   `XSetInputFocus`.
 
+## Importación desde Google Authenticator
+
+- `migration.py` decodifica `otpauth-migration://offline?data=…`: base64 de un
+  protobuf `MigrationPayload` que se lee a mano (varints y campos de
+  longitud). Secreto en bytes → Base32; `Emisor:cuenta` → nombre y usuario;
+  algoritmo y dígitos según los enums de Google. HOTP y MD5 se descartan con
+  aviso. Cada QR trae `batch_index`/`batch_size`/`batch_id`, lo que permite
+  decir qué QR de la exportación faltan (`missing_batches`).
+- `qr.py` lee QR con `libzbar` por ctypes, sobre imágenes en escala de grises
+  (canal verde, recortado con slices para que sea rápido).
+- `camera.py`: `fuente ! videoconvert ! tee` → rama con `gtksink` (visor) y
+  rama `queue leaky ! GRAY8 ! appsink` que se escanea cada 150 ms. Las cámaras
+  se listan con `Gst.DeviceMonitor` (V4L2 primero, con su `/dev/videoN`).
+- `migration.import_accounts` omite las cuentas cuyo secreto ya existe.
+
 ## Decisiones descartadas
 
 - **Extensión de navegador (v1):** funcionaba, pero exigía instalarla en cada

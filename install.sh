@@ -43,6 +43,19 @@ then
   echo "                   at-spi2-core libxtst6 gnome-keyring libnotify-bin" >&2
   exit 1
 fi
+# Opcionales: importar desde Google Authenticator (leer QR y usar la cámara).
+if ! python3 - <<'PY' 2>/dev/null
+import ctypes, gi
+ctypes.cdll.LoadLibrary("libzbar.so.0")
+gi.require_version("Gst", "1.0")
+from gi.repository import Gst
+Gst.init(None)
+assert Gst.ElementFactory.find("gtksink")
+PY
+then
+  echo "    (Para importar desde Google Authenticator con la cámara instala:"
+  echo "     sudo apt install libzbar0 gir1.2-gstreamer-1.0 gstreamer1.0-gtk3 gstreamer1.0-plugins-good)"
+fi
 
 echo "==> Copiando la aplicación en $PREFIX"
 # Se paran la app y el proceso en segundo plano para que usen el código nuevo.

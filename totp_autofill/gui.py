@@ -347,6 +347,11 @@ class MainWindow(Gtk.ApplicationWindow):
         add.set_tooltip_text("Añadir cuenta")
         add.connect("clicked", lambda _b: self.edit_account(None))
         header.pack_start(add)
+        import_button = Gtk.Button.new_from_icon_name("document-open-symbolic",
+                                                      Gtk.IconSize.BUTTON)
+        import_button.set_tooltip_text("Importar desde Google Authenticator")
+        import_button.connect("clicked", self.import_accounts)
+        header.pack_start(import_button)
         about = Gtk.Button.new_from_icon_name("help-about-symbolic", Gtk.IconSize.BUTTON)
         about.set_tooltip_text("Acerca de")
         about.connect("clicked", self._about)
@@ -364,8 +369,9 @@ class MainWindow(Gtk.ApplicationWindow):
         self.stack.add_named(scrolled, "list")
 
         empty = Gtk.Label(justify=Gtk.Justification.CENTER)
-        empty.set_markup("<big>No hay cuentas</big>\n\nPulsa <b>+</b> y pega el secreto 2FA.\n"
-                         "No hace falta indicar dónde se usa: te lo preguntará.")
+        empty.set_markup("<big>No hay cuentas</big>\n\nPulsa <b>+</b> y pega el secreto 2FA, o\n"
+                         "importa todas las de <b>Google Authenticator</b> (botón junto al +).\n"
+                         "No hace falta indicar dónde se usan: te lo preguntará.")
         self.stack.add_named(empty, "empty")
 
         self.status = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
@@ -466,6 +472,31 @@ class MainWindow(Gtk.ApplicationWindow):
             break
         dialog.destroy()
         self.reload()
+
+    def import_accounts(self, *_args) -> None:
+        from .import_dialog import ImportDialog
+
+        dialog = ImportDialog(self, self.store)
+        response = dialog.run()
+        result = dialog.run_import() if response == Gtk.ResponseType.OK else None
+        dialog.destroy()
+        if result is None:
+            return
+        self.reload()
+        lines = [f"Importadas: {len(result.imported)}"]
+        if result.existing:
+            lines.append(f"Ya las tenías: {len(result.existing)}")
+        if result.errors:
+            lines.append("Con errores:\n" + "\n".join(result.errors))
+        lines.append("\nNo necesitan configuración: la primera vez que uses cada una te "
+                     "preguntará en qué sitio va y lo recordará.\n\nSi hiciste fotos o "
+                     "capturas de los QR, bórralas: contienen todos tus secretos.")
+        info = Gtk.MessageDialog(transient_for=self, modal=True,
+                                 message_type=Gtk.MessageType.INFO,
+                                 buttons=Gtk.ButtonsType.OK, text="Importación terminada")
+        info.format_secondary_text("\n".join(lines))
+        info.run()
+        info.destroy()
 
     def delete_account(self, account: Account) -> None:
         dialog = Gtk.MessageDialog(

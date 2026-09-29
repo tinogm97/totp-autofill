@@ -193,6 +193,33 @@ def run_fill_and_choose_second() -> None:
     proc.wait(20)
 
 
+def camera_import() -> None:
+    """La webcam se simula con la foto de un QR de exportación en bucle."""
+    sys.path.insert(0, str(ROOT / "tests"))
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import GLib, Gtk
+
+    from migration_fixtures import BATCH_2
+    from totp_autofill.camera import CameraScanner
+
+    got: list[str] = []
+    photo = ROOT / "tests" / "data" / "google-export-2-photo.jpg"
+    scanner = CameraScanner(lambda codes: (got.extend(codes), Gtk.main_quit()),
+                            source=f"filesrc location={photo} ! jpegdec ! videoconvert ! imagefreeze")
+    window = Gtk.Window()
+    window.add(scanner.widget)
+    window.show_all()
+    scanner.start()
+    GLib.timeout_add_seconds(15, Gtk.main_quit)
+    Gtk.main()
+    scanner.stop()
+    window.destroy()
+    ok = got == [BATCH_2]
+    results.append(("cámara", ok, str(got)))
+    print(f"{'OK   ' if ok else 'FALLO'} cámara simulada lee el QR de exportación"
+          f"{'' if ok else f': {got} {scanner.error}'}", flush=True)
+
+
 def main() -> int:
     server = subprocess.Popen([sys.executable, "-m", "http.server", str(PORT),
                                "--directory", str(ROOT / "examples")],
@@ -239,6 +266,9 @@ def main() -> int:
         store = AccountStore()
         for account in store.load():
             store.delete(account.id)
+
+    print("== Importar desde Google Authenticator", flush=True)
+    camera_import()
 
     failed = [r for r in results if not r[1]]
     print(f"\n{len(results) - len(failed)}/{len(results)} escenarios correctos")

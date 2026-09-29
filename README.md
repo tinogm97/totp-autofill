@@ -10,6 +10,8 @@ navegador ni URLs que configurar**:
 
 ![Ventana principal](docs/screenshot-main.png)
 
+- 📥 **Importa todas tus cuentas de Google Authenticator** de una vez, con la
+  webcam o con fotos de los QR de exportación.
 - 🔐 **Secretos en el llavero de GNOME** (libsecret), nunca en texto plano.
 - 🧠 **Aprende dónde usas cada cuenta**: la primera vez te pregunta cuál es y
   la recuerda para ese sitio (o esa ventana).
@@ -29,15 +31,16 @@ navegador ni URLs que configurar**:
 
 1. [Instalación](#instalación)
 2. [Primeros pasos](#primeros-pasos)
-3. [Cómo elige la cuenta](#cómo-elige-la-cuenta)
-4. [Modo automático y Chrome](#modo-automático-y-chrome)
-5. [El atajo de teclado](#el-atajo-de-teclado)
-6. [Línea de comandos](#línea-de-comandos)
-7. [Seguridad](#seguridad)
-8. [Solución de problemas](#solución-de-problemas)
-9. [Cómo funciona](#cómo-funciona)
-10. [Desarrollo](#desarrollo)
-11. [Desinstalar](#desinstalar)
+3. [Importar desde Google Authenticator](#importar-desde-google-authenticator)
+4. [Cómo elige la cuenta](#cómo-elige-la-cuenta)
+5. [Modo automático y Chrome](#modo-automático-y-chrome)
+6. [El atajo de teclado](#el-atajo-de-teclado)
+7. [Línea de comandos](#línea-de-comandos)
+8. [Seguridad](#seguridad)
+9. [Solución de problemas](#solución-de-problemas)
+10. [Cómo funciona](#cómo-funciona)
+11. [Desarrollo](#desarrollo)
+12. [Desinstalar](#desinstalar)
 
 ---
 
@@ -104,6 +107,9 @@ totp-autofill status
 
 ## Primeros pasos
 
+> ¿Usas **Google Authenticator**? Sáltate los pasos 1 y 2 e
+> [impórtalas todas de una vez](#importar-desde-google-authenticator).
+
 ### 1. Consigue el secreto TOTP
 
 Al activar el 2FA en un servicio te muestran un QR. Junto a él casi siempre
@@ -138,6 +144,36 @@ Abre **TOTP Autofill** desde el menú y pulsa **+**:
   ![Selector de cuenta](docs/screenshot-picker.png)
 
 - **En cualquier otro sitio:** pon el cursor en el campo y pulsa `Ctrl+Alt+2`.
+
+## Importar desde Google Authenticator
+
+Pulsa el botón **Importar** (junto al **+**) en la app:
+
+![Importar](docs/screenshot-import.png)
+
+1. En el móvil: **Google Authenticator** → menú **⋮** → **Transferir cuentas** →
+   **Exportar** → elige las cuentas → **Siguiente**. Aparecen uno o varios QR.
+2. En el ordenador: **Escanear con la cámara** y enseña cada QR a la webcam
+   (si hay varios, pasa al siguiente en el móvil; la app te dice cuáles faltan).
+3. Revisa la lista (las que ya tienes salen desmarcadas) y pulsa **Importar**.
+
+Las cuentas importadas no necesitan configuración: la primera vez que uses
+cada una te preguntará en qué sitio va y lo recordará.
+
+- En **Android** Google Authenticator no deja hacer capturas de esa pantalla:
+  usa la cámara del ordenador, o haz una foto con otro dispositivo y ábrela con
+  **Abrir imágenes de los QR…**.
+- Si tu portátil tiene dos cámaras con el mismo nombre (normal e infrarroja),
+  elige la otra en la lista si la imagen sale oscura.
+- También vale pegar enlaces `otpauth-migration://` u `otpauth://` (**Pegar
+  enlaces…**) o, desde la terminal: `totp-autofill import foto1.jpg foto2.jpg`.
+- No se importan las cuentas HOTP (por contador) ni MD5; la app lo indica.
+- **Borra después las fotos o capturas de los QR**: contienen todos tus
+  secretos. Las cuentas siguen también en el móvil (exportar no las borra).
+
+Necesita `libzbar0` (lectura de QR) y, para la cámara, GStreamer con
+`gstreamer1.0-gtk3`; en Ubuntu Desktop suelen venir instalados. Si no:
+`sudo apt install libzbar0 gir1.2-gstreamer-1.0 gstreamer1.0-gtk3 gstreamer1.0-plugins-good`.
 
 ## Cómo elige la cuenta
 
@@ -216,6 +252,8 @@ totp-autofill list                   # lista las cuentas
 totp-autofill add "GitHub" --user tino --site github.com --auto-submit
                                      # pide el secreto sin mostrarlo
 totp-autofill add "VPN" --uri "otpauth://totp/Empresa:yo?secret=...&issuer=Empresa"
+totp-autofill import captura1.png captura2.jpg   # exportación de Google Authenticator
+totp-autofill import "otpauth-migration://offline?data=..."
 totp-autofill code GitHub            # 123456  (válido 17s)
 totp-autofill code ana@empresa.com   # también por email
 totp-autofill delete GitHub
@@ -310,6 +348,9 @@ totp-autofill/
 │   ├── daemon.py         # proceso en segundo plano + acción del atajo
 │   ├── chrome_setup.py   # lanzador de Chrome con accesibilidad
 │   ├── keybinding.py     # atajo de GNOME
+│   ├── migration.py      # exportación de Google Authenticator (protobuf)
+│   ├── qr.py / camera.py # lectura de QR (libzbar) y webcam (GStreamer)
+│   ├── import_dialog.py  # ventana de importación
 │   ├── gui.py / cli.py   # interfaz gráfica y línea de comandos
 │   └── icons/            # icono de la app (PNG 16–512 px y SVG)
 ├── examples/demo-2fa.html  # página demo (varios usuarios, 6 cajas, multipágina)
@@ -329,7 +370,8 @@ tests/e2e/run.sh                          # test end-to-end (ver abajo)
 El **test end-to-end** abre un Chromium real con la página demo, arranca el
 daemon y maneja la página como una persona (clics y teclado) para comprobar
 que llega el código correcto: dos usuarios en el mismo sitio, 6 cajas,
-multipágina, selector, atajo con y sin daemon y aprendizaje por ventana. Se
+multipágina, selector, atajo con y sin daemon, aprendizaje por ventana y
+lectura de un QR de exportación con una cámara simulada. Se
 ejecuta en una sesión aislada (Xvfb, D-Bus y accesibilidad propios, `HOME`
 temporal y secretos en un fichero temporal): no toca tu escritorio ni tu
 llavero. Necesita `xvfb`, `at-spi2-core` y un Chromium

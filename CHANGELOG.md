@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.0 — 2026-09-29
+
+- **Importar desde Google Authenticator**: botón *Importar* en la app para
+  leer la exportación (⋮ → Transferir cuentas → Exportar) con la **webcam**,
+  con **imágenes** de los QR o pegando enlaces `otpauth-migration://` /
+  `otpauth://`. Indica qué QR de la exportación faltan, marca las cuentas que
+  ya tienes y avisa de las que no se pueden importar (HOTP, MD5).
+- `totp-autofill import FOTO|ENLACE|FICHERO…` para hacerlo desde la terminal.
+- Lectura de QR con libzbar (ctypes) y cámara con GStreamer, sin
+  dependencias de Python nuevas.
+
 ## 2.0.1 — 2026-09-29
 
 - El proceso en segundo plano ya no se cae si el bus de accesibilidad de la
