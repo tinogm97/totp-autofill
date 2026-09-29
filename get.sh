@@ -35,8 +35,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
+if [ -t 1 ]; then BLUE=$'\033[1;34m' RED=$'\033[1;31m' RESET=$'\033[0m'; else BLUE="" RED="" RESET=""; fi
+say() { printf '%s==>%s %s\n' "$BLUE" "$RESET" "$*"; }
+die() { printf '%sError:%s %s\n' "$RED" "$RESET" "$*" >&2; exit 1; }
 
 if command -v curl >/dev/null; then
   fetch() { curl -fsSL "$1"; }
