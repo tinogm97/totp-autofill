@@ -36,6 +36,7 @@ RECENT_USER_TTL = 10 * 60  # s que se recuerda el usuario escrito en un sitio
 USERS_CACHE_TTL = 5  # s que se cachea la lista de usuarios configurados
 MAX_AUTO_FILLS = 2  # por campo y 5 minutos: evita bucles si el código falla
 FIELD_MEMORY = 5 * 60
+A11Y_RETRY_S = 30  # s entre reintentos si no hay bus de accesibilidad
 DISMISS_TTL = 10 * 60  # s sin volver a preguntar en un sitio tras pulsar Esc
 
 # Nunca se registran códigos ni secretos: solo qué se detecta y se decide.
@@ -62,6 +63,17 @@ class Daemon:
         self.picker: Picker | None = None
         self._users: tuple[float, set[str]] = (0.0, set())
 
+        self.accessible = False
+        if self._start_accessibility():
+            # Sin bus de accesibilidad el atajo sigue funcionando (por título
+            # de ventana); se reintenta por si el bus aparece más tarde.
+            log.warning("sin bus de accesibilidad: solo funcionará el atajo")
+            GLib.timeout_add_seconds(A11Y_RETRY_S, self._start_accessibility)
+
+    def _start_accessibility(self) -> bool:
+        """Conecta con AT-SPI. Devuelve ``True`` si hay que reintentarlo."""
+        if not a11y.bus_available():
+            return True
         Atspi.init()
         self._listener = Atspi.EventListener.new(self._on_focus)
         self._listener.register("object:state-changed:focused")
@@ -71,6 +83,9 @@ class Daemon:
         self._text_listener = Atspi.EventListener.new(self._on_text)
         self._text_listener.register("object:text-changed:insert")
         self._text_listener.register("object:text-changed:delete")
+        self.accessible = True
+        log.debug("conectado al bus de accesibilidad")
+        return False
 
     def _configured_users(self) -> set[str]:
         when, users = self._users
@@ -230,7 +245,7 @@ class Daemon:
     def fill_focused(self) -> None:
         window, title, pid = self._active_window()
         log.debug("atajo: ventana %#x pid=%d", window, pid)
-        entry = self.last_entry
+        entry = self.last_entry if self.accessible else None
         if entry is None or a11y.process_id(entry) != pid or not a11y.is_focused(entry):
             entry = None
         ctx, doc = self._context(entry, title)
@@ -248,8 +263,8 @@ class Daemon:
 
 
 def run(debug: bool = False) -> int:
-    if debug:
-        logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(message)s")
+    logging.basicConfig(level=logging.DEBUG if debug else logging.WARNING,
+                        format="%(asctime)s %(message)s")
     GLib.set_prgname("totp-autofill")
     app = Gtk.Application(application_id=DAEMON_ID,
                           flags=Gio.ApplicationFlags.FLAGS_NONE)

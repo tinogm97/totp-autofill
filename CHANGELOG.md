@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.1 — 2026-09-29
+
+- El proceso en segundo plano ya no se cae si el bus de accesibilidad de la
+  sesión no está disponible (la librería AT-SPI abortaba el proceso): arranca
+  en modo solo-atajo y reintenta conectar cada 30 s.
+- Revisión de seguridad: antes de teclear se comprueba que la ventana y el
+  campo con el foco siguen siendo los mismos; no se escribe si el campo es de
+  una ventana en segundo plano; nunca se lee el texto de campos de
+  contraseña; un error de X11 ya no cierra el proceso; el selector solo deja
+  de preguntar en un sitio tras pulsar Esc (y durante 10 minutos).
+- Lanzador de Chrome: se guarda una copia exacta del lanzador de usuario que
+  existiera y se restaura al desactivar; respeta `env` y rutas con espacios.
+- El almacén de secretos en fichero para tests exige `TOTP_AUTOFILL_TESTING=1`.
+
 ## 2.0.0 — 2026-09-29
 
 **Sin extensión de navegador y sin URLs que configurar.**

@@ -89,6 +89,7 @@ if [ -n "$INSTALLED" ]; then
   cat <<MSG
 
 Actualizado de $INSTALLED a $(cat "$PREFIX/VERSION").
-Recarga la extensión en chrome://extensions (botón ↻) y reinicia la app.
+Reinicia Chrome por completo para el modo automático y comprueba con:
+  totp-autofill status
 MSG
 fi

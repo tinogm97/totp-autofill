@@ -21,6 +21,28 @@ TEXT_LIMIT = 20_000  # caracteres de la página que se leen, como mucho
 NODE_LIMIT = 3_000
 
 
+def bus_available() -> bool:
+    """¿Se puede conectar al bus de accesibilidad?
+
+    Hay que comprobarlo antes de ``Atspi.init()``: si el bus no responde, la
+    librería aborta el proceso entero en vez de devolver un error.
+    """
+    from gi.repository import Gio, GLib
+
+    try:
+        session = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        address = session.call_sync(
+            "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus", "GetAddress", None,
+            GLib.VariantType("(s)"), Gio.DBusCallFlags.NONE, 3000, None).unpack()[0]
+        connection = Gio.DBusConnection.new_for_address_sync(
+            address, Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT
+            | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
+        connection.close_sync(None)
+        return True
+    except GLib.Error:
+        return False
+
+
 def _safe(fn, default=None):
     try:
         return fn()
