@@ -1,119 +1,86 @@
 # TOTP Autofill
 
-Aplicación de escritorio para **Ubuntu** que **rellena automáticamente los
-códigos 2FA (TOTP)** en los formularios web que tú configures. Le dices "en
-esta URL me piden el código del Authenticator" y, cada vez que aparezca el
-formulario, el código se escribe solo (y, si quieres, se envía), sin tener que
-mirar el móvil.
+Aplicación de escritorio para **Ubuntu** que **escribe tus códigos 2FA (TOTP)
+en el campo donde estés**, sin mirar el móvil y **sin extensiones de
+navegador ni URLs que configurar**:
+
+- **Automático:** al entrar en el campo del código de una web, se escribe solo.
+- **Con un atajo:** pon el cursor en el campo y pulsa **`Ctrl+Alt+2`**. Funciona
+  en cualquier aplicación, no solo en el navegador.
 
 ![Ventana principal](docs/screenshot-main.png)
 
-- 🔐 **Secretos en el llavero de GNOME** (libsecret), nunca en texto plano ni
-  en el navegador.
-- 🌐 **Extensión para Chrome, Chromium, Brave, Edge y Firefox** que detecta el
-  campo del código, incluidos formularios que aparecen tras el login (SPA) y
-  los de "6 cajitas".
-- ⚙️ **Configuración por URL** con comodines (`https://sso.empresa.com/mfa*`)
-  o por sitio completo (`localhost:4200`), selector CSS opcional y envío
-  automático.
-- 👥 **Varias cuentas en la misma URL** (ideal para entornos de desarrollo):
-  cada cuenta va asociada a un email/usuario y se rellena la del usuario con
-  el que inicias sesión; si no se puede saber, te deja elegir.
-- 🧩 **Sin dependencias externas**: Python 3 + GTK 3 del sistema; el TOTP
-  (RFC 6238) está implementado con la librería estándar.
-- ⌨️ **App gráfica, CLI, popup y atajo de teclado** (`Alt+Shift+2`).
+- 🔐 **Secretos en el llavero de GNOME** (libsecret), nunca en texto plano.
+- 🧠 **Aprende dónde usas cada cuenta**: la primera vez te pregunta cuál es y
+  la recuerda para ese sitio (o esa ventana).
+- 👥 **Varias cuentas en el mismo sitio** (p. ej. usuarios de prueba en
+  `localhost:4200`): usa la del email con el que inicias sesión.
+- 🛡️ **Nunca escribe sin preguntar en un sitio desconocido.**
+- 🧩 **Sin dependencias externas**: Python 3, GTK 3, AT-SPI y XTest del sistema.
 
 > ⚠️ **Aviso de seguridad:** tener el segundo factor en el mismo ordenador que
-> la contraseña debilita el 2FA (deja de ser "algo que tienes" separado de
-> "algo que sabes"). Úsalo en tu equipo personal, con disco cifrado y sesión
-> bloqueada, y conserva el secreto también en tu autenticador del móvil. Ver
+> la contraseña debilita el 2FA. Úsalo en tu equipo personal, con disco
+> cifrado y sesión bloqueada, y conserva el secreto también en el móvil. Ver
 > [Seguridad](#seguridad).
 
 ---
 
 ## Índice
 
-1. [Cómo funciona](#cómo-funciona)
-2. [Requisitos](#requisitos)
-3. [Instalación](#instalación)
-4. [Instalar la extensión](#instalar-la-extensión)
-5. [Configurar una cuenta](#configurar-una-cuenta)
-6. [Patrones de URL](#patrones-de-url)
-7. [Varias cuentas en la misma URL](#varias-cuentas-en-la-misma-url)
-8. [Detección del campo del código](#detección-del-campo-del-código)
-9. [Uso diario](#uso-diario)
-10. [Línea de comandos](#línea-de-comandos)
-11. [Seguridad](#seguridad)
-12. [Solución de problemas](#solución-de-problemas)
-13. [Desarrollo](#desarrollo)
-14. [Desinstalar](#desinstalar)
+1. [Instalación](#instalación)
+2. [Primeros pasos](#primeros-pasos)
+3. [Cómo elige la cuenta](#cómo-elige-la-cuenta)
+4. [Modo automático y Chrome](#modo-automático-y-chrome)
+5. [El atajo de teclado](#el-atajo-de-teclado)
+6. [Línea de comandos](#línea-de-comandos)
+7. [Seguridad](#seguridad)
+8. [Solución de problemas](#solución-de-problemas)
+9. [Cómo funciona](#cómo-funciona)
+10. [Desarrollo](#desarrollo)
+11. [Desinstalar](#desinstalar)
 
 ---
 
-## Cómo funciona
-
-```
-┌──────────────── Navegador ──────────────┐        ┌──────── Escritorio ──────┐
-│                                         │        │                          │
-│  Página web (p. ej. sso.empresa.com/mfa)│        │  totp-autofill host      │
-│   └─ content.js                         │ Native │   ├─ accounts.json       │
-│       1. ¿esta URL tiene cuenta?  ──────┼───────►│   │  (URLs, selectores)  │
-│       2. busca el campo del código      │Messag- │   └─ Llavero GNOME       │
-│       3. pide el código ◄───────────────┤  ing   │      (secretos TOTP)     │
-│       4. lo escribe (y envía)           │        │                          │
-│  background.js (puente + prefiltro)     │        │  App GTK: gestiona cuentas│
-└─────────────────────────────────────────┘        └──────────────────────────┘
-```
-
-1. En la app de escritorio configuras una cuenta: **nombre**, **email o
-   usuario**, **URL del formulario** y **secreto TOTP** (el mismo que
-   escaneaste con el QR).
-2. Al cargar una página, la extensión comprueba si su URL encaja con algún
-   patrón configurado. Si no, no hace nada más.
-3. Si encaja, busca el campo del código (o espera a que aparezca) y pide el
-   código actual a la app de escritorio mediante
-   [Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging).
-4. La app lee el secreto del llavero, calcula el código y devuelve **solo los
-   6–8 dígitos**. La extensión los escribe y, si lo activaste, envía el
-   formulario.
-
-Más detalle en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
-
-## Requisitos
-
-- Ubuntu 22.04 / 24.04 (o cualquier distro con GNOME/KDE y libsecret).
-- Python 3.10+ con los bindings de GTK 3 y libsecret (vienen de serie en
-  Ubuntu Desktop). Si te falta alguno:
-
-  ```bash
-  sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-secret-1 gnome-keyring
-  ```
-
-- Un navegador Chromium (Chrome, Chromium, Brave, Edge, Vivaldi) o Firefox.
-
 ## Instalación
 
-Con un solo comando, sin clonar el repositorio:
+Con un solo comando, sin clonar el repositorio ni usar `sudo`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh | bash
 ```
 
-Descarga la última versión publicada, la instala y borra los ficheros
-temporales. **Volver a ejecutarlo actualiza** a la última versión (después,
-recarga la extensión en `chrome://extensions` con ↻).
+Volver a ejecutarlo **actualiza** a la última versión. El instalador:
+
+| Qué hace | Dónde |
+|---|---|
+| Instala la app y el comando `totp-autofill` | `~/.local/share/totp-autofill/`, `~/.local/bin/` |
+| Añade la app al menú de aplicaciones | `~/.local/share/applications/` |
+| Arranca el proceso en segundo plano y lo añade al inicio de sesión | `~/.config/autostart/` |
+| Registra el atajo **`Ctrl+Alt+2`** (GNOME) | Ajustes → Teclado → Atajos personalizados |
+| Crea un lanzador de Chrome con accesibilidad (para el modo automático) | `~/.local/share/applications/google-chrome.desktop` |
+
+Si no quieres alguna de las dos últimas cosas:
+`… | bash -s -- --no-shortcut` o `--no-chrome` (o desde un clon:
+`./install.sh --no-chrome`).
 
 <details>
-<summary>Otras opciones del instalador</summary>
+<summary>Requisitos y otras formas de instalar</summary>
+
+Ubuntu 22.04/24.04 con sesión **X11** (ver [Wayland](#uso-con-wayland)) y los
+paquetes de sistema, que vienen de serie en Ubuntu Desktop:
 
 ```bash
-# Una versión concreta, o la rama main (en desarrollo)
-curl -fsSL https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh | bash -s -- --version v1.2.0
+sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-secret-1 gir1.2-atspi-2.0 \
+                 at-spi2-core libxtst6 gnome-keyring libnotify-bin
+```
+
+```bash
+# Una versión concreta, o la rama main
+curl -fsSL https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh | bash -s -- --version v2.0.0
 curl -fsSL https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh | bash -s -- --main
 
 # Revisar el script antes de ejecutarlo
-curl -fsSLO https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh
-less get.sh && bash get.sh
+curl -fsSLO https://raw.githubusercontent.com/tinogm97/totp-autofill/main/get.sh && less get.sh && bash get.sh
 
 # Desde una copia del repositorio
 git clone https://github.com/tinogm97/totp-autofill.git && cd totp-autofill && ./install.sh
@@ -121,340 +88,268 @@ git clone https://github.com/tinogm97/totp-autofill.git && cd totp-autofill && .
 
 </details>
 
-Ni el instalador ni la app **necesitan `sudo`**. Todo se instala en tu usuario:
+Comprueba que todo está listo:
 
-| Qué | Dónde |
-|---|---|
-| App, extensión y desinstalador | `~/.local/share/totp-autofill/` |
-| Comando `totp-autofill` | `~/.local/bin/totp-autofill` |
-| Lanzador del menú | `~/.local/share/applications/totp-autofill.desktop` |
-| Registro del host nativo | `~/.config/google-chrome/NativeMessagingHosts/`, `~/.mozilla/native-messaging-hosts/` y la carpeta de cualquier Chrome con `--user-data-dir` en `~/.config` |
+```bash
+totp-autofill status
+```
 
-> El host solo se registra en los navegadores que hayas abierto al menos una
-> vez (tiene que existir su carpeta de configuración). Si instalas un
-> navegador después, vuelve a ejecutar el instalador.
+```
+✔ Teclear en X11 (XTest)
+✔ Proceso en segundo plano (totp-autofill daemon)
+✔ Atajo de teclado: Ctrl+Alt+2
+✔ Lanzador de Chrome con accesibilidad
+   ✔ /opt/google/chrome/chrome: modo automático disponible
+```
 
-## Instalar la extensión
-
-La extensión está en `~/.local/share/totp-autofill/extension` (también en la
-carpeta `extension/` del repositorio).
-
-### Chrome / Chromium / Brave / Edge
-
-1. Abre `chrome://extensions` (o `brave://extensions`, `edge://extensions`).
-2. Activa el **Modo de desarrollador** (esquina superior derecha).
-3. Pulsa **Cargar descomprimida** y elige
-   `~/.local/share/totp-autofill/extension`.
-4. El ID de la extensión debe ser **`blnffoflcmdajflilndalbfcgeddaakd`**
-   (es fijo gracias al campo `key` del manifiesto; el host nativo solo acepta
-   ese ID).
-5. Reinicia el navegador la primera vez para que detecte el host nativo.
-
-### Firefox
-
-Firefox solo instala de forma permanente extensiones firmadas. Tienes dos
-opciones:
-
-- **Probar (temporal):** `about:debugging#/runtime/this-firefox` →
-  *Cargar complemento temporal…* → elige `extension/manifest.json`. Se quita
-  al cerrar Firefox.
-- **Permanente:** fírmala como extensión *no listada* en
-  [addons.mozilla.org](https://addons.mozilla.org/developers/) con
-  [`web-ext sign`](https://extensionworkshop.com/documentation/develop/web-ext-command-reference/#web-ext-sign)
-  e instala el `.xpi` resultante.
-
-En ambos casos, ve a `about:addons` → TOTP Autofill → *Permisos* y permite el
-**acceso a todos los sitios web** (en Manifest V3 Firefox no lo concede
-automáticamente).
-
-## Configurar una cuenta
+## Primeros pasos
 
 ### 1. Consigue el secreto TOTP
 
-Al activar el 2FA en un servicio te muestran un código QR. Junto a él casi
-siempre hay un enlace tipo **"¿No puedes escanear el código?"** o
-**"Introducir la clave manualmente"** que muestra el **secreto** (algo como
-`JBSW Y3DP EHPK 3PXP`). También sirve la URI completa `otpauth://totp/...` si
-la tienes (por ejemplo, leyendo el QR con `zbarimg`).
+Al activar el 2FA en un servicio te muestran un QR. Junto a él casi siempre
+hay un enlace **"¿No puedes escanear el código?"** o **"Introducir la clave
+manualmente"** que muestra el **secreto** (algo como `JBSW Y3DP EHPK 3PXP`).
+También sirve la URI completa `otpauth://totp/...`.
 
-> Consejo: escanea el QR con el móvil **y** guarda el secreto en TOTP
-> Autofill. Así ambos generan los mismos códigos y tienes respaldo.
+> Escanea el QR con el móvil **y** guarda el secreto aquí: ambos generan los
+> mismos códigos y tienes respaldo. Si ya tenías el 2FA activado, busca
+> "cambiar app de autenticación" en los ajustes de seguridad del servicio.
 
-Si ya tenías el 2FA activado y no guardaste el secreto, normalmente tendrás
-que desactivarlo y volver a activarlo (o "cambiar la app de autenticación")
-desde los ajustes de seguridad del servicio.
+### 2. Añade la cuenta
 
-### 2. Añádela en la app
-
-Abre **TOTP Autofill** desde el menú de aplicaciones y pulsa **+**:
+Abre **TOTP Autofill** desde el menú y pulsa **+**:
 
 ![Diálogo de cuenta](docs/screenshot-edit.png)
 
 | Campo | Descripción |
 |---|---|
-| **Nombre** | Descriptivo, p. ej. `VPN Empresa`. |
-| **Cuenta / email** | El email o usuario con el que inicias sesión. Opcional si es la única cuenta de esa URL; **necesario** para distinguir varias cuentas en la misma URL. |
-| **URL del formulario** | Dirección de la página que pide el código. Admite `*`; un host solo (`localhost:4200`) abarca todo el sitio. Ver [Patrones de URL](#patrones-de-url). |
-| **Secreto** | Secreto Base32 o URI `otpauth://`. Con URI se rellenan solos nombre, email, dígitos, periodo y algoritmo. |
-| **Selector CSS** | *Opcional.* Solo si la detección automática no encuentra el campo. |
-| **Enviar automáticamente** | Pulsa el botón del formulario tras escribir el código. |
-| **Opciones avanzadas** | Dígitos (6–8), periodo (30 s) y algoritmo (SHA1). Cámbialos solo si el servicio lo indica. |
+| **Nombre** | Descriptivo, p. ej. `Portal dev`. |
+| **Cuenta / email** | Con el que inicias sesión. Distingue varias cuentas del mismo sitio. |
+| **Secreto** | Base32 o URI `otpauth://` (rellena sola el resto). |
+| **Sitios** | *Opcional.* `localhost:4200`, `github.com`, `*.empresa.com`… Si lo dejas vacío, te preguntará la primera vez y lo aprenderá. |
+| **Pulsar Intro** | Envía el formulario tras escribir el código. |
 
-**¿Cómo sé la URL del formulario?** Inicia sesión en el servicio hasta la
-pantalla del código y copia la barra de direcciones. Suele convenir cambiar
-la parte variable por `*`, por ejemplo `https://login.empresa.com/mfa/*`.
+### 3. Úsala
 
-## Patrones de URL
+- **Con Chrome reiniciado** (ver [modo automático](#modo-automático-y-chrome)):
+  entra en la página del código. Se escribe solo o, si es la primera vez en ese
+  sitio, te pregunta qué cuenta es:
 
-- `*` significa "cualquier cosa" (incluido nada). El resto de caracteres,
-  incluidos `.` y `?`, se comparan literalmente.
-- Si no pones esquema (`https://`), vale cualquiera.
-- Si pones **solo el host** (`localhost:4200`, `app.empresa.com`), abarca
-  todas las páginas de ese sitio.
-- Si el patrón **no** contiene `?` ni `#`, se ignoran la *query* y el
-  *fragmento* de la URL.
-- No distingue mayúsculas y minúsculas.
+  ![Selector de cuenta](docs/screenshot-picker.png)
 
-| Patrón | Encaja | No encaja |
-|---|---|---|
-| `localhost:4200` | `http://localhost:4200/login`, `http://localhost:4200/#/2fa` | `http://localhost:4201/login` |
-| `https://sso.empresa.com/mfa` | `https://sso.empresa.com/mfa?next=/home` | `https://sso.empresa.com/mfa/paso2` |
-| `https://sso.empresa.com/mfa*` | `…/mfa`, `…/mfa/paso2` | `https://otra.com/mfa` |
-| `https://*.empresa.com/2fa` | `https://vpn.empresa.com/2fa` | `https://empresa.com.malo.com/2fa` ✱ |
-| `github.com/sessions/two-factor*` | `https://github.com/sessions/two-factor/app` | `https://gitlab.com/…` |
-| `https://app.com/login?step=otp*` | `https://app.com/login?step=otp&x=1` | `https://app.com/login?step=pwd` |
+- **En cualquier otro sitio:** pon el cursor en el campo y pulsa `Ctrl+Alt+2`.
 
-✱ Cuidado con los comodines demasiado amplios: `https://*empresa.com/*`
-**sí** encajaría con `https://malaempresa.com/`. Escribe el dominio lo más
-concreto posible. La app de escritorio nunca entrega un código si la URL real
-de la página no encaja con el patrón de la cuenta.
+## Cómo elige la cuenta
 
-## Varias cuentas en la misma URL
+1. **Por el sitio** (host de la página, solo con accesibilidad). Si hay varias
+   cuentas para ese sitio, por el **email** que escribiste al iniciar sesión
+   (aunque el código se pida en otra página) o por el que aparezca en la
+   página ("Código para ana@…").
+2. **Por la ventana** donde ya la usaste (título), cuando no hay accesibilidad.
+3. **Si solo tienes una cuenta**, esa (solo con el atajo).
+4. Si no puede decidir, **te pregunta** con la lista (las más probables
+   primero) y **recuerda** la respuesta: el sitio si lo conoce, o el título de
+   la ventana.
 
-Típico de desarrollo: `localhost:4200` sirve para iniciar sesión con varios
-usuarios de prueba, cada uno con su propio 2FA. Crea una cuenta por usuario
-con la **misma URL** y un **email distinto**:
+El modo automático **solo escribe sin preguntar** si decidió por el sitio (1):
+el título de una ventana lo controla la propia página y podría imitarse.
+
+Las asociaciones aprendidas se ven y editan en cada cuenta (**Sitios**) y las
+ventanas aprendidas se pueden olvidar desde el mismo diálogo.
+
+### Varias cuentas en el mismo sitio
+
+Típico de desarrollo: `localhost:4200` con varios usuarios de prueba.
 
 ```bash
-totp-autofill add "Portal dev" localhost:4200 --user ana@empresa.com
-totp-autofill add "Portal dev" localhost:4200 --user admin@empresa.com --auto-submit
+totp-autofill add "Portal dev" --user ana@empresa.com   --site localhost:4200
+totp-autofill add "Portal dev" --user admin@empresa.com --site localhost:4200 --auto-submit
 ```
 
-Cuando llegas a la pantalla del código, la extensión elige la cuenta así:
+Inicia sesión con `admin@empresa.com` y, al llegar al código, se escribe el de
+esa cuenta. Si entras con un email que no es de ninguna cuenta, pregunta.
 
-1. **El email/usuario que escribiste al iniciar sesión**, en esta página o en
-   una anterior de la misma pestaña (aunque el login esté en otro dominio,
-   p. ej. un Keycloak en `localhost:8080`).
-2. **El email que aparezca en la página** ("Introduce el código para
-   ana@empresa.com").
-3. Si no puede decidir, muestra un **selector** bajo el campo del código para
-   que elijas la cuenta. También puedes elegirla desde el popup.
+> Para reconocer el email, lee lo que escribes en campos de usuario/email,
+> **solo lo recuerda si coincide con una cuenta configurada** y solo en memoria
+> (10 minutos). Nunca lee campos de contraseña.
 
-No se pueden crear dos cuentas con la misma URL y el mismo usuario (la app
-avisa).
+## Modo automático y Chrome
 
-> Para reconocer al usuario, la extensión mira lo que escribes en campos de
-> email/usuario, pero **solo lo recuerda si coincide con un usuario
-> configurado**, y solo en memoria mientras la pestaña está abierta.
+El modo automático usa la **accesibilidad** (AT-SPI, lo mismo que los lectores
+de pantalla) para saber en qué campo estás y en qué página. Chrome solo la
+activa si arranca con `--force-renderer-accessibility` **y** la variable
+`QT_ACCESSIBILITY=1`. El instalador crea un lanzador de Chrome para tu usuario
+con ambas cosas; **cierra Chrome del todo y vuelve a abrirlo** desde el menú o
+el dock.
 
-## Detección del campo del código
+También puedes activarlo o desactivarlo en **Preferencias**:
 
-Sin selector, la extensión prueba, por este orden:
+![Preferencias](docs/screenshot-prefs.png)
 
-1. Un campo con `autocomplete="one-time-code"` (el estándar).
-2. Un grupo de tantas cajas de 1 carácter como dígitos tenga el código.
-3. Un campo cuyo nombre, id, placeholder, etiqueta o `aria-label` hable de
-   *otp, 2fa, mfa, código, code, token, verificación…*.
-4. El único campo visible cuyo `maxlength` coincide con el número de dígitos.
+o con `totp-autofill setup-chrome` / `totp-autofill setup-chrome --undo`.
 
-Si el formulario aparece más tarde (por ejemplo tras meter la contraseña en
-la misma página), la extensión sigue vigilando la página y lo rellena en
-cuanto aparece.
+**Chrome lanzado por un script** (p. ej. un Chrome aparte para la VPN con
+`--user-data-dir`): hay que añadir el flag y la variable en ese script. Para
+`/usr/local/bin/chrome-vpn-session`, Preferencias y `totp-autofill status`
+muestran el comando exacto (`sudo sed …`).
 
-**Selector propio:** si no detecta el campo, haz clic derecho sobre él →
-*Inspeccionar* → clic derecho en el `<input>` de DevTools → *Copiar → Copiar
-selector*, y pégalo en el campo **Selector CSS**. Si el selector encaja con
-varios campos, se escribe un dígito en cada uno.
+> La accesibilidad hace que Chrome gaste algo más de memoria y CPU. Si no
+> quieres activarla, el **atajo** funciona igual sin ella (eligiendo por la
+> ventana en vez de por el sitio).
 
-## Uso diario
+## El atajo de teclado
 
-- **Automático:** basta con abrir la página. El código se escribe solo
-  (como máximo dos veces por página, para evitar bucles si el servicio lo
-  rechaza). Si al código le quedan menos de 3 s de validez, espera al
-  siguiente.
-- **Popup:** pulsa el icono de la extensión para ver si está conectada con la
-  app, ver las cuentas de la página (marca la *detectada*) y rellenar el
-  código manualmente con la que elijas.
-- **Atajo:** `Alt+Shift+2` rellena el código en la página actual. Puedes
-  cambiarlo en `chrome://extensions/shortcuts`.
-- **App de escritorio:** muestra todos los códigos con su cuenta atrás y
-  permite copiarlos al portapapeles.
+`Ctrl+Alt+2` ejecuta `totp-autofill fill`: escribe el código en el campo con el
+foco, en cualquier aplicación (navegador, cliente VPN, terminal…). Cámbialo en
+Preferencias, con `totp-autofill setup-shortcut --binding '<Super>o'` o en
+Ajustes → Teclado → Atajos de teclado → Atajos personalizados.
+
+En escritorios que no son GNOME, crea un atajo que ejecute
+`~/.local/bin/totp-autofill fill`.
 
 ## Línea de comandos
 
 ```bash
-totp-autofill                      # abre la app gráfica
-totp-autofill list                 # lista las cuentas
-totp-autofill add "GitHub" "github.com/sessions/two-factor*" --user tino --auto-submit
-                                   # pide el secreto sin mostrarlo
-totp-autofill add "Portal dev" localhost:4200 --user ana@empresa.com
-totp-autofill add "VPN" "https://vpn.empresa.com/mfa*" \
-    --uri "otpauth://totp/Empresa:yo?secret=...&issuer=Empresa"
-totp-autofill code GitHub          # 123456  (válido 17s)
-totp-autofill code ana@empresa.com # también por email/usuario
-totp-autofill code GitHub -q | xclip -sel clip
+totp-autofill                        # abre la app
+totp-autofill status                 # comprueba que todo está listo
+totp-autofill list                   # lista las cuentas
+totp-autofill add "GitHub" --user tino --site github.com --auto-submit
+                                     # pide el secreto sin mostrarlo
+totp-autofill add "VPN" --uri "otpauth://totp/Empresa:yo?secret=...&issuer=Empresa"
+totp-autofill code GitHub            # 123456  (válido 17s)
+totp-autofill code ana@empresa.com   # también por email
 totp-autofill delete GitHub
-totp-autofill install-browser --host-path ~/.local/share/totp-autofill/totp-autofill-host
-totp-autofill uninstall-browser
+totp-autofill fill                   # lo que hace el atajo
+totp-autofill daemon --debug         # ver qué detecta y decide (nunca muestra códigos)
+totp-autofill setup-chrome [--undo]
+totp-autofill setup-shortcut [--binding '<Control><Alt>2' | --remove]
 ```
-
-`totp-autofill <comando> --help` muestra todas las opciones.
 
 ## Seguridad
 
 **Qué protege:**
 
-- Los secretos TOTP están en el **llavero del sistema** (cifrado con tu
-  contraseña de sesión). `accounts.json` solo tiene nombres, URLs y
-  selectores, con permisos `600`.
-- La extensión **nunca recibe secretos**, solo el código del momento (y los
-  nombres, emails y URLs de las cuentas, para saber cuál usar).
-- Lo que escribes en campos de usuario solo se recuerda si coincide con un
-  email configurado, en memoria de sesión del navegador y por pestaña.
-- La URL de la página la aporta el navegador (`sender.url`), no la página. La
-  app de escritorio vuelve a comprobar que la URL encaja con el patrón de la
-  cuenta antes de generar el código, así que una web maliciosa no puede
-  obtener códigos de otra cuenta.
-- El host nativo solo es accesible para la extensión con ID
-  `blnffoflcmdajflilndalbfcgeddaakd` (Chromium) o
-  `totp-autofill@tinogm97.github.io` (Firefox).
+- Los secretos están en el **llavero del sistema**. `accounts.json` solo tiene
+  nombres, emails, sitios y títulos de ventana, con permisos `600`.
+- En modo automático **solo escribe sin preguntar si el sitio de la página** (lo
+  aporta el navegador, no la página) está asociado a la cuenta. En un sitio
+  desconocido pregunta, así que una web de phishing no recibe el código sin tu
+  intervención.
+- El email que escribes solo se recuerda si es de una cuenta configurada, en
+  memoria. Los campos de contraseña nunca se leen.
+- Los registros de depuración nunca incluyen códigos ni secretos.
 
 **Qué no protege:**
 
-- Quien tenga acceso a tu sesión **desbloqueada** puede generar códigos, igual
-  que podría abrir tu gestor de contraseñas.
-- Un malware que se ejecute con tu usuario puede leer el llavero.
-- Debilita notablemente el 2FA si la contraseña también está guardada en el
-  mismo equipo. Para cuentas críticas (banca, correo, gestor de contraseñas
-  principal) valora no usarlo.
+- Quien tenga tu sesión **desbloqueada** puede generar códigos.
+- Un malware con tu usuario puede leer el llavero o simular pulsaciones.
+- Si eliges una cuenta en el selector estando en una web falsa, el código se
+  escribe en ella: fíjate en el sitio que muestra el selector.
+- Debilita el 2FA si la contraseña también está guardada en el mismo equipo.
 
 ## Solución de problemas
 
-**El popup dice "Specified native messaging host not found".**
-Vuelve a ejecutar el instalador con el navegador ya abierto alguna vez, y
-reinicia el navegador por completo. Comprueba que existe el fichero
-`~/.config/google-chrome/NativeMessagingHosts/com.github.tinogm97.totp_autofill.json`.
+Empieza siempre por `totp-autofill status`.
 
-**Uso un Chrome aparte lanzado con `--user-data-dir`** (p. ej. un perfil para
-la VPN). Chrome busca el host dentro de esa carpeta. `install.sh` detecta
-automáticamente cualquier carpeta de datos de Chrome/Chromium dentro de
-`~/.config`; si la tuya está en otro sitio:
-`totp-autofill install-browser --host-path ~/.local/share/totp-autofill/totp-autofill-host --browser-dir /ruta/a/la/carpeta`.
-Reinicia ese navegador después.
+**El modo automático no hace nada.**
+- `status` debe mostrar tu Chrome con ✔. Si sale ✘, ciérralo del todo (también
+  en segundo plano: `pkill chrome`) y ábrelo desde el menú.
+- Mira qué detecta: `pkill -f "totp_autofill daemon"; totp-autofill daemon --debug`
+  y entra en el campo. Deberías ver `foco en campo …` y `campo de código`.
+- Si el campo no parece de código (sin etiqueta ni `maxlength`), usa el atajo.
 
-**"Access to the specified native messaging host is forbidden".**
-La extensión tiene otro ID. Asegúrate de que el manifiesto conserva el campo
-`key`. Si usas otro ID a propósito:
-`totp-autofill install-browser --host-path ~/.local/share/totp-autofill/totp-autofill-host --extension-id TU_ID`.
+**El atajo no hace nada.** Comprueba en Ajustes → Teclado → Atajos
+personalizados que existe "TOTP Autofill" y que otro programa no usa ya esa
+combinación. Prueba `totp-autofill fill` desde una terminal con el foco en un
+campo de texto.
 
-**Chromium instalado como snap.** El confinamiento de snap no le permite
-lanzar programas externos, así que Native Messaging no funciona. Usa Google
-Chrome (`.deb`), Brave o Chromium de otra fuente.
-
-**Firefox instalado como snap (el de serie en Ubuntu).** Las versiones
-recientes admiten Native Messaging a través del portal del escritorio y piden
-permiso la primera vez. Si no funciona, instala el Firefox `.deb` del
-repositorio de Mozilla.
-
-**No detecta el campo.** Configura el **Selector CSS** (ver
-[Detección del campo](#detección-del-campo-del-código)). Si el formulario está
-dentro de un `iframe` de otro dominio, el patrón debe encajar con **la URL
-del iframe**, no con la de la página principal.
+**Escribe el código de otra cuenta.** Ábrela en la app y revisa **Sitios** y
+las ventanas aprendidas (botón **Olvidar**).
 
 **"No hay secreto en el llavero".** El llavero está bloqueado o se reinició.
-Abre *Contraseñas y claves* (Seahorse), desbloquea el llavero *Inicio de
-sesión* y edita la cuenta para volver a introducir el secreto.
+Ábrelo en *Contraseñas y claves* (Seahorse) y vuelve a introducir el secreto.
 
-**Depurar el host a mano:**
+### Uso con Wayland
 
-```bash
-python3 - <<'PY' | ~/.local/share/totp-autofill/totp-autofill-host | tail -c +5
-import json, struct, sys
-m = json.dumps({"type": "ping"}).encode()
-sys.stdout.buffer.write(struct.pack("=I", len(m)) + m)
-PY
-# {"ok": true, "version": "1.0.0"}
+En Wayland las aplicaciones no pueden simular teclas ni ver otras ventanas.
+TOTP Autofill **copia el código al portapapeles** y avisa con una notificación
+para que lo pegues con `Ctrl+V`. Para la experiencia completa, elige
+"Ubuntu en Xorg" en la pantalla de inicio de sesión.
+
+## Cómo funciona
+
 ```
+      Chrome (con accesibilidad)                 totp-autofill daemon
+ ┌─────────────────────────────────┐   AT-SPI  ┌───────────────────────────────┐
+ │ foco en <input> "Código"        ├──────────►│ ¿campo de código?  (detect)   │
+ │ URL: http://localhost:4200/...  │           │ ¿qué cuenta?       (resolver) │
+ │ email escrito: ana@empresa.com  │           │   sitio / email / ventana     │
+ └─────────────────────────────────┘           │   o pregunta (picker)         │
+              ▲                                 │ secreto ← llavero → TOTP      │
+              │   XTest: teclea "123456" ⏎      │                               │
+              └─────────────────────────────────┤ teclea (x11)                  │
+ Ctrl+Alt+2 → totp-autofill fill ──D-Bus──────►│ acción "fill"                 │
+                                                └───────────────────────────────┘
+```
+
+Detalle en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
 ## Desarrollo
 
 ```
 totp-autofill/
-├── totp_autofill/             # Paquete Python (app de escritorio)
-│   ├── totp.py                #   RFC 6238 + parser otpauth://
-│   ├── store.py               #   cuentas, patrones de URL, llavero
-│   ├── native_host.py         #   protocolo Native Messaging
-│   ├── browser_integration.py #   registro del host en navegadores
-│   ├── gui.py                 #   interfaz GTK 3
-│   ├── cli.py                 #   línea de comandos
-│   └── icons/                 #   icono de la app (PNG 16–512 px y SVG)
-├── extension/                 # Extensión Manifest V3 (Chrome + Firefox)
-│   ├── background.js          #   puente con el host nativo + prefiltro
-│   ├── content.js             #   detección y rellenado del campo
-│   └── popup.{html,css,js}    #   estado y relleno manual
-├── examples/demo-2fa.html     # página demo para probar
-├── tests/                     # unitarios, paridad JS↔Python, e2e
-├── data/                      # plantilla del .desktop
-├── scripts/make_icons.py      # generación de iconos
-├── get.sh                     # instalador remoto (curl | bash)
-├── install.sh / uninstall.sh  # instalación desde una copia local
-└── docs/ARQUITECTURA.md
+├── totp_autofill/
+│   ├── totp.py           # RFC 6238 + parser otpauth://
+│   ├── store.py          # cuentas, sitios, preferencias, llavero
+│   ├── detect.py         # ¿es un campo de código? ¿de usuario?
+│   ├── resolver.py       # qué cuenta usar según el contexto
+│   ├── a11y.py           # lectura de páginas por AT-SPI
+│   ├── x11.py            # ventana activa y pulsaciones XTest (ctypes)
+│   ├── filler.py         # escribir el código (o portapapeles en Wayland)
+│   ├── picker.py         # selector de cuenta
+│   ├── daemon.py         # proceso en segundo plano + acción del atajo
+│   ├── chrome_setup.py   # lanzador de Chrome con accesibilidad
+│   ├── keybinding.py     # atajo de GNOME
+│   ├── gui.py / cli.py   # interfaz gráfica y línea de comandos
+│   └── icons/            # icono de la app (PNG 16–512 px y SVG)
+├── examples/demo-2fa.html  # página demo (varios usuarios, 6 cajas, multipágina)
+├── tests/                  # unitarios y e2e
+├── data/                   # plantillas .desktop (menú y autoarranque)
+├── scripts/make_icons.py
+├── get.sh                  # instalador remoto (curl | bash)
+└── install.sh / uninstall.sh
 ```
-
-Ejecutar sin instalar:
 
 ```bash
-python3 -m totp_autofill            # GUI
-python3 -m totp_autofill list       # CLI
+python3 -m totp_autofill                  # GUI sin instalar
+python3 -m unittest discover -s tests -v  # tests unitarios
+tests/e2e/run.sh                          # test end-to-end (ver abajo)
 ```
 
-Tests:
-
-```bash
-python3 -m unittest discover -s tests -v   # unitarios (incluye vectores RFC 6238)
-node tests/url_matches_parity.mjs           # patrones JS y Python se comportan igual
-tests/e2e/run.sh                            # extensión + host reales en Chromium headless
-                                            # (2 usuarios en la misma URL, SPA, multipágina, selector)
-```
-
-El test end-to-end necesita Node ≥ 18 y un Chromium de Playwright
-(`npx playwright install chromium`); Chrome de marca ya no permite cargar
-extensiones por línea de comandos.
+El **test end-to-end** abre un Chromium real con la página demo, arranca el
+daemon y maneja la página como una persona (clics y teclado) para comprobar
+que llega el código correcto: dos usuarios en el mismo sitio, 6 cajas,
+multipágina, selector, atajo con y sin daemon y aprendizaje por ventana. Se
+ejecuta en una sesión aislada (Xvfb, D-Bus y accesibilidad propios, `HOME`
+temporal y secretos en un fichero temporal): no toca tu escritorio ni tu
+llavero. Necesita `xvfb`, `at-spi2-core` y un Chromium
+(`npx playwright install chromium` o `CHROME=/ruta tests/e2e/run.sh`).
 
 Probar la demo a mano:
 
 ```bash
 python3 -m http.server 8765 --directory examples
-totp-autofill add "Demo Ana"  localhost:8765 --user ana@demo.com  --secret JBSWY3DPEHPK3PXP --auto-submit
-totp-autofill add "Demo Luis" localhost:8765 --user luis@demo.com --secret GEZDGNBVGY3TQOJQ --auto-submit
-# abre http://localhost:8765/demo-2fa.html y entra con ana@demo.com, luis@demo.com u otro
-# (?split=1 → 6 cajas, ?multipage=1 → el código se pide en otra página)
+totp-autofill add "Demo" --user ana@demo.com  --site localhost:8765 --secret JBSWY3DPEHPK3PXP --auto-submit
+totp-autofill add "Demo" --user luis@demo.com --site localhost:8765 --secret GEZDGNBVGY3TQOJQ --auto-submit
+# abre http://localhost:8765/demo-2fa.html (?split=1 → 6 cajas, ?multipage=1 → otra página)
 ```
-
-Tras cambiar la extensión, recárgala en `chrome://extensions`. Tras cambiar el
-código Python, vuelve a ejecutar `./install.sh` y reinicia la app (ciérrala
-del todo: solo se ejecuta una instancia).
 
 ## Desinstalar
 
 ```bash
-~/.local/share/totp-autofill/uninstall.sh           # quita la app; conserva cuentas y secretos
-~/.local/share/totp-autofill/uninstall.sh --purge   # además borra cuentas y secretos del llavero
+~/.local/share/totp-autofill/uninstall.sh           # quita la app, el atajo y el lanzador de Chrome
+~/.local/share/totp-autofill/uninstall.sh --purge   # además borra cuentas y secretos
 ```
-
-(o con el instalador remoto: `curl -fsSL …/get.sh | bash -s -- --uninstall`)
-
-Después quita la extensión del navegador.
 
 ## Licencia
 

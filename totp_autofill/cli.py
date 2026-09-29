@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import getpass
 import sys
-from pathlib import Path
 
 from . import __version__
 
@@ -39,22 +38,32 @@ def cmd_gui(_args) -> int:
     return run()
 
 
-def cmd_host(_args) -> int:
-    from .native_host import main
+def cmd_daemon(args) -> int:
+    import os
 
-    return main()
+    from .daemon import run
+
+    return run(debug=args.debug or bool(os.environ.get("TOTP_AUTOFILL_DEBUG")))
+
+
+def cmd_fill(_args) -> int:
+    from .daemon import fill_standalone, request_fill
+
+    return 0 if request_fill() else fill_standalone()
 
 
 def cmd_list(_args) -> int:
-    store = _store()
-    accounts = store.load()
+    accounts = _store().load()
     if not accounts:
         print("No hay cuentas configuradas.")
     for a in accounts:
-        extra = f"  selector={a.selector}" if a.selector else ""
-        auto = "  [auto-envío]" if a.auto_submit else ""
-        user = f" <{a.username}>" if a.username else ""
-        print(f"{a.name}{user}\n    {a.url_pattern}{extra}{auto}\n    id={a.id}")
+        print(a.label)
+        print(f"    sitios: {', '.join(a.sites) or '(se preguntará la primera vez)'}")
+        if a.window_titles:
+            print(f"    ventanas aprendidas: {len(a.window_titles)}")
+        if a.auto_submit:
+            print("    pulsa Intro tras escribir el código")
+        print(f"    id={a.id}")
     return 0
 
 
@@ -72,12 +81,11 @@ def cmd_add(args) -> int:
     if not secret:
         secret = getpass.getpass("Secreto Base32 (no se mostrará): ")
 
-    account = Account(name=args.name, url_pattern=args.url, username=username,
-                      selector=args.selector,
+    account = Account(name=args.name, username=username, sites=args.site,
                       auto_submit=args.auto_submit, digits=digits, period=period,
                       algorithm=algorithm)
     _store().save(account, secret)
-    print(f"Cuenta '{account.name}' guardada (id={account.id}).")
+    print(f"Cuenta '{account.label}' guardada (id={account.id}).")
     return 0
 
 
@@ -92,57 +100,105 @@ def cmd_delete(args) -> int:
     store = _store()
     account = _find(store, args.account)
     store.delete(account.id)
-    print(f"Cuenta '{account.name}' eliminada.")
+    print(f"Cuenta '{account.label}' eliminada.")
     return 0
 
 
-def cmd_install_browser(args) -> int:
-    from .browser_integration import install
+def cmd_setup_chrome(args) -> int:
+    from . import chrome_setup
 
-    written = install(Path(args.host_path), args.extension_id,
-                      [Path(d).expanduser() for d in args.browser_dir])
-    if not written:
-        print("No se detectó ningún navegador compatible.", file=sys.stderr)
+    if args.undo:
+        for path in chrome_setup.disable():
+            print(f"Restaurado: {path}")
+        return 0
+    changed = chrome_setup.enable()
+    for path in changed:
+        print(f"Lanzador con accesibilidad: {path}")
+    if not changed and not chrome_setup.is_enabled():
+        print("No se encontró ningún Chrome/Chromium instalado.", file=sys.stderr)
         return 1
-    for path in written:
-        print(f"Registrado: {path}")
+    print("Cierra el navegador por completo y vuelve a abrirlo para que tenga efecto.")
+    if fix := chrome_setup.vpn_script_fix():
+        print(f"\nPara el Chrome VPN (necesita sudo):\n  {fix}")
     return 0
 
 
-def cmd_uninstall_browser(_args) -> int:
-    from .browser_integration import uninstall
+def cmd_setup_shortcut(args) -> int:
+    from . import keybinding
+    from .store import Settings
 
-    for path in uninstall():
-        print(f"Eliminado: {path}")
+    if args.remove:
+        keybinding.uninstall()
+        print("Atajo eliminado.")
+        return 0
+    settings = Settings.load()
+    binding = args.binding or settings.shortcut
+    keybinding.install(keybinding.fill_command(), binding)
+    settings.shortcut = binding
+    settings.save()
+    print(f"Atajo {keybinding.label(binding)} → escribir el código 2FA.")
+    return 0
+
+
+def cmd_status(_args) -> int:
+    from . import chrome_setup, keybinding
+    from .daemon import is_running
+    from .x11 import X11, X11Error
+
+    ok = lambda b: "✔" if b else "✘"  # noqa: E731
+    try:
+        X11()
+        x11 = True
+    except X11Error:
+        x11 = False
+    print(f"{ok(x11)} Teclear en X11 (XTest)" + ("" if x11 else ": se usará el portapapeles"))
+
+    running = is_running()
+    print(f"{ok(running)} Proceso en segundo plano (totp-autofill daemon)")
+
+    shortcut = keybinding.current()
+    print(f"{ok(shortcut)} Atajo de teclado: {keybinding.label(shortcut) if shortcut else 'sin configurar'}")
+
+    print(f"{ok(chrome_setup.is_enabled())} Lanzador de Chrome con accesibilidad")
+    for proc in chrome_setup.running_browsers():
+        where = f" ({proc.user_data_dir})" if proc.user_data_dir else ""
+        print(f"   {ok(proc.accessible)} {proc.exe}{where}: "
+              + ("modo automático disponible" if proc.accessible
+                 else "sin accesibilidad (reinícialo desde el lanzador)"))
+    if fix := chrome_setup.vpn_script_fix():
+        print(f"   ✘ Chrome VPN sin accesibilidad. Arréglalo con:\n     {fix}")
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="totp-autofill",
-        description="Autocompletado de códigos 2FA (TOTP) en formularios web.")
+        description="Escribe códigos 2FA (TOTP) en el campo donde estés.")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("gui", help="abrir la aplicación gráfica (por defecto)"
                    ).set_defaults(func=cmd_gui)
-    sub.add_parser("host", help="modo Native Messaging (lo lanza el navegador)"
-                   ).set_defaults(func=cmd_host)
+    daemon = sub.add_parser("daemon", help="proceso en segundo plano (se inicia con la sesión)")
+    daemon.add_argument("--debug", action="store_true",
+                        help="mostrar qué detecta y decide (nunca muestra códigos)")
+    daemon.set_defaults(func=cmd_daemon)
+    sub.add_parser("fill", help="escribir el código en el campo con el foco "
+                                "(lo lanza el atajo de teclado)").set_defaults(func=cmd_fill)
     sub.add_parser("list", help="listar cuentas").set_defaults(func=cmd_list)
 
     add = sub.add_parser("add", help="añadir una cuenta")
     add.add_argument("name", help="nombre descriptivo")
-    add.add_argument("url", help="patrón de URL del formulario, admite * "
-                     "(p. ej. localhost:4200 o https://sso.empresa.com/mfa*)")
     add.add_argument("-u", "--user", default="",
-                     help="email o usuario de la cuenta (necesario si varias "
-                          "cuentas comparten URL)")
+                     help="email o usuario (distingue varias cuentas del mismo sitio)")
+    add.add_argument("-s", "--site", action="append", default=[],
+                     help="sitio donde se usa, p. ej. localhost:4200 o *.empresa.com "
+                          "(opcional y repetible; si falta, se pregunta y se aprende)")
     src = add.add_mutually_exclusive_group()
     src.add_argument("--secret", help="secreto Base32 (si no, se pide por teclado)")
     src.add_argument("--uri", help="URI otpauth://totp/... del código QR")
-    add.add_argument("--selector", default="", help="selector CSS del campo")
     add.add_argument("--auto-submit", action="store_true",
-                     help="enviar el formulario tras rellenar")
+                     help="pulsar Intro tras escribir el código")
     add.add_argument("--digits", type=int, default=6)
     add.add_argument("--period", type=int, default=30)
     add.add_argument("--algorithm", default="SHA1",
@@ -150,27 +206,25 @@ def build_parser() -> argparse.ArgumentParser:
     add.set_defaults(func=cmd_add)
 
     code = sub.add_parser("code", help="mostrar el código actual de una cuenta")
-    code.add_argument("account", help="nombre o id")
+    code.add_argument("account", help="nombre, usuario o id")
     code.add_argument("-q", "--quiet", action="store_true", help="solo el código")
     code.set_defaults(func=cmd_code)
 
     delete = sub.add_parser("delete", help="eliminar una cuenta")
-    delete.add_argument("account", help="nombre o id")
+    delete.add_argument("account", help="nombre, usuario o id")
     delete.set_defaults(func=cmd_delete)
 
-    inst = sub.add_parser("install-browser",
-                          help="registrar el host nativo en los navegadores")
-    inst.add_argument("--host-path", required=True,
-                      help="ruta absoluta al ejecutable totp-autofill-host")
-    inst.add_argument("--extension-id", action="append", default=[],
-                      help="ID adicional de extensión Chromium permitido")
-    inst.add_argument("--browser-dir", action="append", default=[],
-                      help="carpeta de datos de un Chrome lanzado con "
-                           "--user-data-dir fuera de ~/.config")
-    inst.set_defaults(func=cmd_install_browser)
+    chrome = sub.add_parser("setup-chrome",
+                            help="activar la accesibilidad en Chrome (modo automático)")
+    chrome.add_argument("--undo", action="store_true", help="deshacer")
+    chrome.set_defaults(func=cmd_setup_chrome)
 
-    sub.add_parser("uninstall-browser", help="eliminar el registro del host nativo"
-                   ).set_defaults(func=cmd_uninstall_browser)
+    shortcut = sub.add_parser("setup-shortcut", help="configurar el atajo de teclado en GNOME")
+    shortcut.add_argument("--binding", help="p. ej. '<Control><Alt>2' (por defecto)")
+    shortcut.add_argument("--remove", action="store_true", help="quitar el atajo")
+    shortcut.set_defaults(func=cmd_setup_shortcut)
+
+    sub.add_parser("status", help="comprobar que todo está listo").set_defaults(func=cmd_status)
     return parser
 
 
@@ -179,6 +233,6 @@ def main(argv: list[str] | None = None) -> int:
     func = getattr(args, "func", cmd_gui)
     try:
         return func(args)
-    except (ValueError, LookupError) as exc:
+    except (ValueError, LookupError, RuntimeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

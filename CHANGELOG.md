@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.0.0 — 2026-09-29
+
+**Sin extensión de navegador y sin URLs que configurar.**
+
+- **Modo automático** por accesibilidad (AT-SPI): al entrar en un campo de
+  código de una web, se escribe el código solo, tecleándolo con XTest. Solo
+  escribe sin preguntar en sitios ya asociados a una cuenta.
+- **Atajo `Ctrl+Alt+2`** (GNOME): escribe el código en el campo con el foco,
+  en cualquier aplicación. Funciona también sin accesibilidad.
+- **Aprendizaje**: si no sabe qué cuenta usar, muestra un selector junto al
+  campo y recuerda la respuesta (sitio o, sin accesibilidad, título de la
+  ventana). Los sitios de cada cuenta son opcionales.
+- Varias cuentas en el mismo sitio: elige por el email que escribes al
+  iniciar sesión (solo se recuerda si es de una cuenta configurada) o el que
+  aparece en la página.
+- Proceso en segundo plano (`totp-autofill daemon`) que arranca con la sesión.
+- `totp-autofill setup-chrome`: lanzador de Chrome con
+  `--force-renderer-accessibility` y `QT_ACCESSIBILITY=1`; indica el comando
+  para el Chrome VPN.
+- Preferencias en la app (automático, atajo, estado de Chrome) y
+  `totp-autofill status`.
+- Wayland: copia el código al portapapeles y avisa.
+- Test end-to-end en sesión aislada (Xvfb) con Chromium real, también en CI.
+- **Eliminado**: la extensión de navegador, el host de Native Messaging y los
+  patrones de URL / selectores CSS. Al actualizar se migran los patrones a
+  sitios y se limpia el registro del host; quita la extensión del navegador.
+
 ## 1.2.1 — 2026-09-29
 
 - **Icono de la app**: la ventana se identificaba como `__main__.py` y usaba

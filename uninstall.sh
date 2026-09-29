@@ -3,10 +3,12 @@
 # se pase --purge.
 set -euo pipefail
 
-PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/totp-autofill"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
+PREFIX="$DATA/totp-autofill"
+BIN="$HOME/.local/bin/totp-autofill"
+AUTOSTART="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/io.github.tinogm97.TotpAutofill.Daemon.desktop"
 
-if [ -x "$HOME/.local/bin/totp-autofill" ]; then
+if [ -x "$BIN" ]; then
   if [ "${1:-}" = "--purge" ]; then
     echo "==> Borrando cuentas y secretos del llavero"
     PYTHONPATH="$PREFIX" python3 - <<'PY'
@@ -17,15 +19,15 @@ for account in store.load():
 PY
     rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/totp-autofill"
   fi
-  "$HOME/.local/bin/totp-autofill" uninstall-browser
+  "$BIN" setup-shortcut --remove >/dev/null 2>&1 || true
+  "$BIN" setup-chrome --undo || true
 fi
 
-pkill -f "python3 -m totp_autofill\$" 2>/dev/null || true
+pkill -f "python3 -m totp_autofill( daemon)?\$" 2>/dev/null || true
 rm -rf "$PREFIX"
-rm -f "$HOME/.local/bin/totp-autofill" \
+rm -f "$BIN" "$AUTOSTART" \
       "$DATA/applications/totp-autofill.desktop" \
       "$DATA/applications/io.github.tinogm97.TotpAutofill.desktop" \
       "$DATA"/icons/hicolor/*/apps/totp-autofill.png \
-      "$DATA/icons/hicolor/scalable/apps/totp-autofill.svg" \
-      "$DATA/icons/hicolor/256x256/apps/totp-autofill.png"
-echo "TOTP Autofill desinstalado. Recuerda quitar la extensión del navegador."
+      "$DATA/icons/hicolor/scalable/apps/totp-autofill.svg"
+echo "TOTP Autofill desinstalado."

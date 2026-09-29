@@ -7,26 +7,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Tests unitarios (Python)
-        run: python -m unittest discover -s tests -v
-      - name: Paridad de patrones JS ↔ Python
-        run: node tests/url_matches_parity.mjs
-      - name: Sintaxis de la extensión
-        run: for f in extension/*.js; do node --check "$f"; done
+      - name: Dependencias del sistema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-gi gir1.2-gtk-3.0 gir1.2-secret-1 \
+            gir1.2-atspi-2.0 at-spi2-core libxtst6 >/dev/null
+      - name: Tests unitarios
+        run: /usr/bin/python3 -m unittest discover -s tests -v
       - name: Sintaxis de los scripts
         run: for f in get.sh install.sh uninstall.sh tests/e2e/run.sh; do bash -n "$f"; done
       - name: Instalador de principio a fin (HOME temporal)
         run: |
-          sudo apt-get install -y -qq python3-gi gir1.2-gtk-3.0 gir1.2-secret-1 >/dev/null
-          export HOME="$(mktemp -d)" && mkdir -p "$HOME/.config/google-chrome"
-          PATH=/usr/bin:$PATH ./install.sh
-          test -x "$HOME/.local/bin/totp-autofill"
-          test -f "$HOME/.config/google-chrome/NativeMessagingHosts/com.github.tinogm97.totp_autofill.json"
-          "$HOME/.local/share/totp-autofill/uninstall.sh"
-          test ! -e "$HOME/.local/share/totp-autofill"
+          export HOME="$(mktemp -d)" PATH=/usr/bin:/bin
+          dbus-run-session -- bash -c '
+            set -e
+            ./install.sh --no-chrome
+            test -x "$HOME/.local/bin/totp-autofill"
+            "$HOME/.local/bin/totp-autofill" --version
+            "$HOME/.local/share/totp-autofill/uninstall.sh"
+            test ! -e "$HOME/.local/share/totp-autofill"'
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias del sistema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-gi gir1.2-gtk-3.0 gir1.2-secret-1 \
+            gir1.2-atspi-2.0 at-spi2-core libxtst6 xvfb dbus-x11 >/dev/null
+      - name: Test end-to-end (Chrome real, sesión aislada)
+        run: CHROME="$(command -v google-chrome)" PATH=/usr/bin:/bin:/usr/local/bin tests/e2e/run.sh

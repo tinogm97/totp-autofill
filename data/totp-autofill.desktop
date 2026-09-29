@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=TOTP Autofill
-Comment=Autocompletado de códigos 2FA en formularios web
+Comment=Códigos 2FA (TOTP) escritos en el campo donde estés
 Exec=@BIN@
 Icon=totp-autofill
 Terminal=false

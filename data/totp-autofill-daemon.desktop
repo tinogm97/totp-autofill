@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=TOTP Autofill (segundo plano)
+Comment=Escribe los códigos 2FA al entrar en un campo de código o con Ctrl+Alt+2
+Exec=@BIN@ daemon
+Icon=totp-autofill
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3

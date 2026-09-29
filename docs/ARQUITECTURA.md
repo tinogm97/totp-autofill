@@ -1,152 +1,165 @@
 # Arquitectura
 
-TOTP Autofill tiene dos piezas que se comunican por
-[Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging):
+TOTP Autofill escribe códigos TOTP en el campo con el foco **sin extensión de
+navegador**. Se apoya en dos servicios del escritorio Linux:
 
-| Pieza | Tecnología | Responsabilidad |
+| Servicio | Para qué | Módulo |
 |---|---|---|
-| **App de escritorio** (`totp_autofill/`) | Python 3, GTK 3, libsecret | Guardar cuentas y secretos, generar códigos, GUI y CLI. |
-| **Extensión** (`extension/`) | WebExtension Manifest V3 | Detectar la página y el campo, pedir el código y escribirlo. |
+| **AT-SPI** (accesibilidad) | Saber en qué campo estás, qué es, en qué página (URL) y qué email escribiste | `a11y.py` |
+| **XTest** (X11) | Teclear el código como si fuera el teclado | `x11.py` |
 
-La división responde a una idea: **el secreto no sale nunca del proceso de
-escritorio**. El navegador solo ve códigos de un solo uso.
+Chrome no permite escribir en campos por accesibilidad (no implementa
+`EditableText`), así que la lectura va por AT-SPI y la escritura por XTest.
 
-## Flujo completo
+## Procesos
 
 ```
-content.js                background.js                 host (Python)
-    │  {type: match}           │                              │
-    ├─────────────────────────►│ ¿patrones en caché (15 s)?   │
-    │                          ├── no ── {type: patterns} ───►│ lee accounts.json
-    │                          │◄──────── [patrones] ─────────┤
-    │                          │ ¿la URL encaja con alguno?   │
-    │                          ├── sí ── {type: match, url} ─►│ filtra cuentas
-    │◄──── [cuentas sin secreto]◄─────────────────────────────┤
-    │ busca el campo / espera (MutationObserver)              │
-    │  {type: code, id}        │                              │
-    ├─────────────────────────►├── {type: code, id, url} ────►│ ¿url encaja con la cuenta?
-    │                          │                              │ secreto ← llavero
-    │◄──── {code, remaining} ──┤◄─────────────────────────────┤ TOTP(secreto, ahora)
-    │ escribe + envía (opcional)                              │
+ sesión ──autostart──► totp-autofill daemon     (Gtk.Application, id …TotpAutofill.Daemon)
+                          ├─ escucha AT-SPI: object:state-changed:focused
+                          │                  object:text-changed:{insert,delete}
+                          └─ acción D-Bus "fill"  ◄── totp-autofill fill ◄── Ctrl+Alt+2 (GNOME)
+
+ menú ─────────────────► totp-autofill          (GUI: cuentas y preferencias)
 ```
 
-- `url` la pone **background.js a partir de `sender.url`**, que rellena el
-  navegador. El content script no puede falsificarla.
-- El prefiltro de patrones evita lanzar el proceso Python en cada página que
-  visitas: solo se consulta al host cuando la URL encaja con algún patrón (y
-  para refrescar la caché cada 15 s como mucho).
+- El daemon es una `Gtk.Application`: una sola instancia por sesión y la
+  acción `fill` publicada en D-Bus (`org.gtk.Actions` en
+  `/io/github/tinogm97/TotpAutofill/Daemon`).
+- `totp-autofill fill` llama a esa acción. Si el daemon no está en marcha,
+  hace lo mismo por su cuenta, solo con el título de la ventana
+  (`daemon.fill_standalone`).
+- La GUI arranca el daemon si no lo encuentra.
 
-## Protocolo del host
+## Flujo automático
 
-Cada mensaje es JSON en UTF-8 precedido de su longitud en 4 bytes (orden
-nativo). El navegador lanza `totp-autofill-host` y le habla por stdin/stdout.
+1. **Foco en un campo** (`_on_focus`): se guarda como último campo y, si el
+   modo automático está activo, 150 ms después se evalúa (`_maybe_autofill`).
+2. **¿Es un campo de código?** `detect.otp_confidence` sobre lo que expone
+   Chrome (`FieldInfo.from_atspi`: etiqueta, `id`, `html-input-name`,
+   `text-input-type`, `maxlength`, `placeholder-text`):
+   - **2**: `autocomplete=one-time-code` o etiqueta/id que habla de código
+     (`otp`, `2fa`, `código`, `verification`…) sin pistas de lo contrario
+     (email, contraseña, postal, cupón…);
+   - **1**: sin pistas pero con `maxlength` 1 (cajas de un dígito) o 6-8;
+   - **0**: no.
+3. **Contexto**: host del documento (`Atspi.Document` → `URI`), título de la
+   ventana activa (EWMH) y usuario escrito recientemente en ese host.
+4. **Resolución** (`resolver.resolve`), ver abajo. Si hay varias candidatas,
+   se lee el texto de la página (`a11y.page_text`) para buscar el email.
+5. **Acción**:
+   - cuenta decidida **por el sitio** (`Resolution.trusted`) → se teclea;
+   - si no, y la confianza es 2 y el host no se canceló antes → selector bajo
+     el campo; lo elegido se aprende (`AccountStore.learn`) y se teclea;
+   - en otro caso, nada (el atajo sigue disponible).
 
-| Petición | Respuesta |
-|---|---|
-| `{"type": "ping"}` | `{"ok": true, "version": "1.0.0"}` |
-| `{"type": "patterns"}` | `{"ok": true, "patterns": ["https://…/mfa*"], "users": ["ana@x.com"]}` |
-| `{"type": "match", "url": U}` | `{"ok": true, "accounts": [{"id", "name", "username", "selector", "autoSubmit", "digits"}]}` |
-| `{"type": "code", "id": I, "url": U}` | `{"ok": true, "code": "123456", "remaining": 17}` |
-| cualquier error | `{"ok": false, "error": "mensaje"}` |
+Protecciones: el campo no se rellena si ya tiene texto; como mucho 2 veces
+por campo cada 5 minutos (evita bucles si el servicio rechaza el código);
+tras teclear se ignoran eventos de foco 1,5 s (en las cajas de un dígito el
+foco salta de caja en caja).
 
-`code` falla si el patrón de la cuenta `I` no encaja con `U`.
+## Flujo del atajo
 
-## Almacenamiento
+`fill_focused`: toma la ventana activa y, si el último campo con foco es de
+esa misma aplicación (mismo PID) y sigue enfocado, usa su host y el usuario
+escrito. Resuelve igual que el automático, pero **acepta** también la
+decisión por título de ventana o por ser la única cuenta, porque lo ha pedido
+el usuario. Si pregunta, al elegir se reactiva la ventana original antes de
+teclear.
 
-- **`~/.config/totp-autofill/accounts.json`** (permisos `600`, escritura
-  atómica con `os.replace`). No puede haber dos cuentas con el mismo
-  `url_pattern` y `username` (sin distinguir mayúsculas). Los ficheros de la
-  v1.0 sin `username` se leen sin problema:
+## Resolución de la cuenta
+
+```
+por sitio (host)  ──►  ¿una?  ──sí──►  cuenta  (via="site", de confianza)
+     │ varias            │no
+     ▼                   ▼
+  por usuario escrito / email en la página ──► ¿una? ──► cuenta (via="site")
+     │ ninguna
+     ▼
+por título de ventana aprendido ──► (misma lógica)  ──► cuenta (via="title")
+     │ ninguna
+     ▼
+¿solo hay una cuenta? ──► cuenta (via="only")
+     │ no
+     ▼
+selector con candidatas ordenadas (las del sitio/usuario primero)
+```
+
+`via="site"` es la única de confianza para escribir sin preguntar: el host lo
+fija el navegador, mientras que el título de la ventana lo decide la página.
+
+## Usuario que inicia sesión
+
+`_on_text` escucha cambios de texto en campos que `detect.is_user_field`
+reconoce como de usuario/email (nunca en contraseñas: se exige rol `entry`).
+Se lee al teclear porque en una SPA el campo ya no existe cuando pierde el
+foco. Solo se guarda si coincide con el usuario de alguna cuenta (en memoria,
+por host, 10 minutos); si se escribe otro distinto, se olvida el anterior
+para no usar la cuenta de un login previo.
+
+## Datos
+
+- `~/.config/totp-autofill/accounts.json` (600, escritura atómica):
 
   ```json
   {
-    "version": 1,
-    "accounts": [
-      {
-        "name": "VPN Empresa",
-        "url_pattern": "https://sso.empresa.com/mfa*",
-        "username": "tino@empresa.com",
-        "selector": "",
-        "auto_submit": false,
-        "digits": 6,
-        "period": 30,
-        "algorithm": "SHA1",
-        "id": "3f1c…"
-      }
-    ]
+    "version": 2,
+    "accounts": [{
+      "name": "Portal dev", "username": "ana@empresa.com",
+      "sites": ["localhost:4200"], "window_titles": [],
+      "auto_submit": false, "digits": 6, "period": 30, "algorithm": "SHA1",
+      "id": "3f1c…"
+    }]
   }
   ```
 
-- **Llavero** (libsecret): un elemento por cuenta con el esquema
-  `com.github.tinogm97.TotpAutofill` y el atributo `account_id`. Se ve en
-  Seahorse como *"TOTP Autofill: <nombre>"*.
+  Los ficheros de la v1 (`url_pattern`, `selector`) se migran al leerlos: el
+  host del patrón pasa a `sites`.
+- `~/.config/totp-autofill/settings.json`: `auto_fill`, `shortcut`.
+- Llavero (libsecret): un elemento por cuenta, esquema
+  `com.github.tinogm97.TotpAutofill`, atributo `account_id`.
+- `TOTP_AUTOFILL_TEST_SECRETS=/fichero.json` cambia el llavero por un fichero
+  **en claro**; existe solo para los tests automáticos.
 
-## Patrones de URL
+## Accesibilidad en Chrome
 
-Implementados dos veces con la misma semántica:
-`url_matches()` en `store.py` (la que decide) y `urlMatches()` en
-`background.js` (solo prefiltro). `tests/url_matches_parity.mjs` comprueba que
-coinciden.
+Comprobado en Chrome/Chromium 151–154 sobre Ubuntu 24.04 (X11):
 
-1. Solo `*` es comodín (→ `.*`); todo lo demás se escapa.
-2. Sin `://` en el patrón se antepone `*://`.
-   Si tras el esquema no hay `/` (solo host), se añade `/*`.
-3. Sin `?` ni `#` en el patrón, se quitan query y fragmento de la URL.
-4. Comparación sin distinguir mayúsculas, anclada al principio y al final.
+| Condición | ¿Expone las páginas? |
+|---|---|
+| Nada | No |
+| `ACCESSIBILITY_ENABLED=1`, `toolkit-accessibility`, `org.a11y.Status.IsEnabled` | No |
+| `org.a11y.Status.ScreenReaderEnabled=true` | Sí, pero **arranca Orca** (lector de pantalla con voz): descartado |
+| `--force-renderer-accessibility` **y** `QT_ACCESSIBILITY=1` | **Sí** |
 
-## Detección del campo (`content.js`)
+Ubuntu define `QT_ACCESSIBILITY=1` en la sesión, pero no llega a navegadores
+lanzados con entorno limpio (p. ej. vía `pkexec`). `chrome_setup` crea un
+lanzador de usuario con `env QT_ACCESSIBILITY=1 … --force-renderer-accessibility`
+(marcado para poder deshacerlo) y genera el `sed` para el script del Chrome
+VPN.
 
-`findField(account)` devuelve una lista de `<input>` (uno, o uno por dígito):
+Además, Chrome solo emite eventos de foco si **su ventana tiene el foco del
+teclado**; en un escritorio normal lo da el gestor de ventanas. En el test
+e2e (Xvfb sin gestor) se da explícitamente con `XSetInputFocus`.
 
-1. `account.selector` si existe (todas las coincidencias visibles).
-2. `autocomplete="one-time-code"`.
-3. Grupo de `digits` inputs con `maxlength=1` que comparten contenedor.
-4. Input cuyo texto descriptivo encaja con `OTP_HINT` y no con `NOT_OTP`.
-5. Único input visible con `maxlength == digits`.
+## Tecleo (`x11.py`)
 
-El valor se asigna con el *setter* nativo de `HTMLInputElement.value` y se
-emiten `input` y `change`, para que frameworks como React detecten el cambio.
+ctypes sobre `libX11` y `libXtst`, sin dependencias:
 
-Protecciones contra efectos no deseados:
-
-- No sobrescribe un campo que ya tiene valor (salvo relleno manual).
-- Máximo 2 rellenos automáticos por URL, para no entrar en bucle de envíos
-  si el servicio rechaza el código y vuelve a pintar el formulario.
-- Si al código le quedan < 3 s, espera al siguiente periodo.
-
-## Elección de cuenta cuando varias comparten URL
-
-`match` puede devolver varias cuentas (p. ej. varios usuarios de prueba en
-`localhost:4200`). `pickAccount()` en `content.js` decide:
-
-1. Si solo hay una, esa.
-2. El usuario escrito en esta página (`typedUser`): se captura en los eventos
-   `change` y `submit` de campos que parecen de usuario/email.
-3. El usuario recordado para la pestaña (`rememberedUser`): el content script
-   envía `{type: "user", value}` y **background.js solo lo guarda si coincide
-   con un usuario configurado** (lista `users` de `patterns`), en
-   `storage.session` con clave `user:<tabId>` (se borra al cerrar la pestaña).
-   Va por pestaña y no por origen para cubrir logins en otro dominio (SSO).
-4. Un único usuario configurado que aparezca en el texto de la página o en el
-   valor de algún input.
-5. Si nada decide, `showChooser()` pinta un selector (en shadow DOM, para que
-   el CSS de la página no le afecte) bajo el campo del código.
-
-## ID fijo de la extensión
-
-Chrome calcula el ID de una extensión desempaquetada a partir de la ruta,
-salvo que el manifiesto incluya `key` (clave pública RSA). Con `key`, el ID es
-`sha256(clave)[:32]` traducido a `a-p`: `blnffoflcmdajflilndalbfcgeddaakd`.
-Eso permite que `install.sh` escriba `allowed_origins` sin preguntar nada.
-La clave privada no se necesita (ni se guarda): solo haría falta para
-empaquetar un `.crx`.
+- `wait_modifiers_released()`: espera a que se suelten Ctrl/Alt del atajo
+  (si no, cada dígito sería otro atajo).
+- `_keycode()`: si la distribución de teclado pone los dígitos con Mayúsculas
+  (AZERTY), las pulsa.
+- `activate()`: `_NET_ACTIVE_WINDOW` (EWMH) o, sin gestor de ventanas,
+  `XSetInputFocus`.
 
 ## Decisiones descartadas
 
-- **Teclear el código con `xdotool` en la ventana activa:** funciona fuera del
-  navegador, pero no puede ver la URL real ni el campo, y no funciona en
-  Wayland. La extensión es más precisa y segura.
-- **Guardar los secretos en `chrome.storage`:** quedarían en el perfil del
-  navegador en claro y accesibles a cualquier código de la extensión.
-- **Dependencias como `pyotp` o `keyring`:** TOTP son 10 líneas con `hmac`, y
-  libsecret ya está en Ubuntu vía `gi`; así la instalación no necesita `pip`.
+- **Extensión de navegador (v1):** funcionaba, pero exigía instalarla en cada
+  navegador y configurar URLs. La accesibilidad da la misma información desde
+  fuera.
+- **Activar el "lector de pantalla" del sistema** para que Chrome exponga las
+  páginas: arranca Orca.
+- **Leer contraseñas o todo lo que se teclea:** solo se leen campos de
+  usuario/email y solo se guardan usuarios configurados.
+- **Dependencias como `pyotp`, `keyring`, `python-xlib` o `xdotool`:** TOTP son
+  10 líneas con `hmac`; libsecret, AT-SPI y XTest ya están en Ubuntu.

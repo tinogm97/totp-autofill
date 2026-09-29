@@ -1,15 +1,16 @@
 <!doctype html>
 <!--
   Página de demostración de un login con 2FA en dos pasos, para probar
-  TOTP Autofill en local (incluido el caso de varias cuentas en la misma URL):
+  TOTP Autofill en local (incluido el caso de varias cuentas en el mismo sitio):
 
     python3 -m http.server 8765 --directory examples
-    totp-autofill add "Demo Ana"  localhost:8765 --user ana@demo.com  --secret JBSWY3DPEHPK3PXP --auto-submit
-    totp-autofill add "Demo Luis" localhost:8765 --user luis@demo.com --secret GEZDGNBVGY3TQOJQ --auto-submit
+    totp-autofill add "Demo" --user ana@demo.com  --site localhost:8765 --secret JBSWY3DPEHPK3PXP --auto-submit
+    totp-autofill add "Demo" --user luis@demo.com --site localhost:8765 --secret GEZDGNBVGY3TQOJQ --auto-submit
 
-  y abre http://localhost:8765/demo-2fa.html en el navegador. Entra con
-  ana@demo.com o luis@demo.com (se rellena el código de esa cuenta) o con
-  otro email (aparece un selector para elegir la cuenta).
+  y abre http://localhost:8765/demo-2fa.html en Chrome (con accesibilidad,
+  ver README). Entra con ana@demo.com o luis@demo.com (se escribe el código
+  de esa cuenta) o con otro email (aparece el selector para elegir). Sin
+  accesibilidad, pulsa el atajo (Ctrl+Alt+2) en el campo del código.
 
   Opciones en la URL:
     ?split=1      el código se pide en 6 cajas de un dígito
@@ -42,6 +43,13 @@
       ? `<div style="display:flex;gap:6px">${'<input class="digit" maxlength="1" inputmode="numeric" style="text-align:center">'.repeat(6)}</div>`
       : `<label>Código <input id="otp" name="otp_code" inputmode="numeric" maxlength="6" autocomplete="off"></label>`;
 
+    // En el modo de 6 cajas, cada dígito pasa el foco a la siguiente caja.
+    document.addEventListener("input", (e) => {
+      if (e.target.classList?.contains("digit") && e.target.value) {
+        e.target.nextElementSibling?.focus();
+      }
+    });
+
     // Paso 2: formulario del código.
     function showMfa(form) {
       form.outerHTML = `
@@ -51,10 +59,13 @@
           ${codeInputs}
           <button type="submit">Verificar</button>
         </form>`;
+      // Como la mayoría de webs, pone el foco en el campo del código.
+      document.querySelector("#mfa input").focus();
       document.getElementById("mfa").addEventListener("submit", (e) => {
         e.preventDefault();
         const code = [...e.target.querySelectorAll("input")].map((i) => i.value).join("");
         e.target.outerHTML = `<div class="done" id="result"><h2>✔ Código enviado</h2><p>Código recibido: <b id="received">${code}</b></p></div>`;
+        document.title = `Recibido ${code}`;  // lo usa el test end-to-end
       });
     }
 

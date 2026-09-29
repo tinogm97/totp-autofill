@@ -1,9 +1,10 @@
-"""Almacenamiento de cuentas.
+"""Almacenamiento de cuentas y preferencias.
 
-- Los **metadatos** (nombre, patrón de URL, selector...) se guardan en
+- Los **metadatos** (nombre, usuario, sitios...) se guardan en
   ``~/.config/totp-autofill/accounts.json`` (permisos 600).
 - Los **secretos TOTP** se guardan en el llavero del sistema (GNOME Keyring /
   KWallet vía libsecret) y nunca se escriben en disco en claro.
+- Las **preferencias** van en ``~/.config/totp-autofill/settings.json``.
 """
 
 from __future__ import annotations
@@ -15,11 +16,12 @@ import uuid
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Protocol
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 from .totp import ALGORITHMS, normalize_secret, seconds_remaining, totp
 
 APP_ID = "totp-autofill"
+MAX_LEARNED_TITLES = 20
 
 
 def config_dir() -> Path:
@@ -27,43 +29,61 @@ def config_dir() -> Path:
     return Path(base) / APP_ID
 
 
+def _write_private_json(path: Path, data: dict) -> None:
+    """Escritura atómica con permisos 600."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = path.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
 # --------------------------------------------------------------------------
-# Patrones de URL
+# Sitios
 # --------------------------------------------------------------------------
 
 
-def _pattern_to_regex(pattern: str) -> re.Pattern[str]:
-    """Convierte un patrón con comodines ``*`` en una expresión regular.
+def normalize_site(value: str) -> str:
+    """Reduce una URL, patrón o host a ``host[:puerto]`` en minúsculas.
 
-    Solo ``*`` es especial (equivale a "cualquier cosa"); el resto de
-    caracteres, incluidos ``?`` y ``.``, se comparan literalmente.
+    ``https://sso.empresa.com/mfa*`` → ``sso.empresa.com``;
+    ``localhost:4200`` → ``localhost:4200``; ``*.empresa.com`` se conserva.
     """
-    parts = (re.escape(chunk) for chunk in pattern.split("*"))
-    return re.compile("^" + ".*".join(parts) + "$", re.IGNORECASE)
+    value = value.strip().lower()
+    if not value:
+        return ""
+    if "://" in value:
+        value = value.split("://", 1)[1]
+    return value.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
 
 
-def url_matches(pattern: str, url: str) -> bool:
-    """Indica si ``url`` encaja con ``pattern``.
+def host_of(url: str) -> str:
+    """``host[:puerto]`` de una URL (vacío si no es http/https)."""
+    parts = urlsplit(url)
+    return parts.netloc.lower() if parts.scheme in ("http", "https") else ""
 
-    Reglas:
-    - ``*`` es comodín. Ej: ``https://login.empresa.com/mfa*``.
-    - Si el patrón no indica esquema (``https://``), vale cualquiera.
-    - Si el patrón es solo un host (``localhost:4200``), abarca todo el
-      sitio, como si fuera ``localhost:4200/*``.
-    - Si el patrón no contiene ``?`` ni ``#``, se ignoran la query y el
-      fragmento de la URL, para que ``/2fa`` encaje con ``/2fa?next=/``.
-    """
-    pattern = pattern.strip()
-    if not pattern or not url:
+
+def site_matches(site: str, host: str) -> bool:
+    """``site`` puede llevar ``*`` como comodín (``*.empresa.com``)."""
+    site, host = normalize_site(site), host.lower()
+    if not site or not host:
         return False
-    if "://" not in pattern:
-        pattern = "*://" + pattern
-    if "/" not in pattern.split("://", 1)[1]:
-        pattern += "/*"
-    if "?" not in pattern and "#" not in pattern:
-        scheme, netloc, path, _query, _fragment = urlsplit(url)
-        url = urlunsplit((scheme, netloc, path, "", ""))
-    return bool(_pattern_to_regex(pattern).match(url))
+    regex = ".*".join(re.escape(part) for part in site.split("*"))
+    return re.fullmatch(regex, host) is not None
+
+
+def clean_title(title: str) -> str:
+    """Quita el sufijo del navegador de un título de ventana.
+
+    ``Verificación - MiApp - Google Chrome`` → ``Verificación - MiApp``.
+    """
+    title = title.strip()
+    for suffix in (" - Google Chrome for Testing", " - Google Chrome", " - Chromium", " — Mozilla Firefox",
+                   " - Mozilla Firefox", " - Brave", " - Microsoft Edge", " - Vivaldi"):
+        if title.endswith(suffix):
+            return title[: -len(suffix)].strip()
+    return title
 
 
 # --------------------------------------------------------------------------
@@ -73,13 +93,17 @@ def url_matches(pattern: str, url: str) -> bool:
 
 @dataclass
 class Account:
-    """Una cuenta 2FA asociada a una página de formulario."""
+    """Una cuenta 2FA.
+
+    ``sites`` y ``window_titles`` indican dónde se usa. No son obligatorios:
+    si faltan, la app pregunta la primera vez y los aprende.
+    """
 
     name: str
-    url_pattern: str
-    username: str = ""  # email o usuario; distingue cuentas con la misma URL
-    selector: str = ""  # selector CSS del campo; vacío = detección automática
-    auto_submit: bool = False  # enviar el formulario tras rellenar
+    username: str = ""  # email o usuario; distingue cuentas del mismo sitio
+    sites: list[str] = field(default_factory=list)  # hosts, admiten *
+    window_titles: list[str] = field(default_factory=list)  # aprendidos
+    auto_submit: bool = False  # pulsar Intro tras escribir el código
     digits: int = 6
     period: int = 30
     algorithm: str = "SHA1"
@@ -87,11 +111,9 @@ class Account:
 
     def validate(self) -> None:
         self.name, self.username = self.name.strip(), self.username.strip()
-        self.url_pattern = self.url_pattern.strip()
+        self.sites = list(dict.fromkeys(s for s in map(normalize_site, self.sites) if s))
         if not self.name:
             raise ValueError("El nombre es obligatorio")
-        if not self.url_pattern:
-            raise ValueError("El patrón de URL es obligatorio")
         if self.digits not in (6, 7, 8):
             raise ValueError("Los dígitos deben ser 6, 7 u 8")
         if self.period <= 0:
@@ -99,21 +121,42 @@ class Account:
         if self.algorithm not in ALGORITHMS:
             raise ValueError(f"Algoritmo no soportado: {self.algorithm}")
 
-    def public_info(self) -> dict:
-        """Datos que se pueden enviar a la extensión (sin secreto)."""
-        return {
-            "id": self.id,
-            "name": self.name,
-            "username": self.username,
-            "selector": self.selector,
-            "autoSubmit": self.auto_submit,
-            "digits": self.digits,
-        }
+    def matches_host(self, host: str) -> bool:
+        return any(site_matches(site, host) for site in self.sites)
+
+    @property
+    def label(self) -> str:
+        return f"{self.name} <{self.username}>" if self.username else self.name
 
     @classmethod
     def from_dict(cls, data: dict) -> "Account":
+        data = dict(data)
+        # v1.x: "url_pattern" se convierte en un sitio.
+        legacy = data.pop("url_pattern", "")
+        if legacy and not data.get("sites"):
+            site = normalize_site(legacy)
+            data["sites"] = [site] if site and site != "*" else []
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in data.items() if k in known})
+
+
+@dataclass
+class Settings:
+    auto_fill: bool = True  # rellenar al entrar en un campo (modo accesibilidad)
+    shortcut: str = "<Control><Alt>2"
+
+    @classmethod
+    def load(cls, path: Path | None = None) -> "Settings":
+        path = path or config_dir() / "settings.json"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return cls()
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
+
+    def save(self, path: Path | None = None) -> None:
+        _write_private_json(path or config_dir() / "settings.json", asdict(self))
 
 
 # --------------------------------------------------------------------------
@@ -180,6 +223,40 @@ class MemoryBackend:
         self.data.pop(account_id, None)
 
 
+class FileBackend(MemoryBackend):
+    """Secretos en un fichero JSON **en claro**. Solo para tests automáticos.
+
+    Se activa con ``TOTP_AUTOFILL_TESTING=1`` **y**
+    ``TOTP_AUTOFILL_TEST_SECRETS=/ruta/fichero.json``, para no depender del
+    llavero del escritorio (ni tocarlo) en los tests.
+    """
+
+    def __init__(self, path: Path) -> None:
+        super().__init__()
+        self.path = path
+        if path.exists():
+            self.data = json.loads(path.read_text(encoding="utf-8"))
+
+    def set(self, account_id: str, label: str, secret: str) -> None:
+        super().set(account_id, label, secret)
+        _write_private_json(self.path, self.data)
+
+    def delete(self, account_id: str) -> None:
+        super().delete(account_id)
+        _write_private_json(self.path, self.data)
+
+
+def default_secret_backend() -> SecretBackend:
+    test_file = os.environ.get("TOTP_AUTOFILL_TEST_SECRETS")
+    # Hacen falta las dos variables, para que no se active por descuido.
+    if test_file and os.environ.get("TOTP_AUTOFILL_TESTING") == "1":
+        import sys
+
+        print(f"AVISO: secretos en {test_file} (en claro, solo para tests)", file=sys.stderr)
+        return FileBackend(Path(test_file))
+    return LibsecretBackend()
+
+
 # --------------------------------------------------------------------------
 # Almacén
 # --------------------------------------------------------------------------
@@ -192,9 +269,7 @@ class AccountStore:
         self, path: Path | None = None, secrets: SecretBackend | None = None
     ) -> None:
         self.path = path or config_dir() / "accounts.json"
-        self.secrets = secrets or LibsecretBackend()
-
-    # -- persistencia de metadatos -------------------------------------
+        self.secrets = secrets or default_secret_backend()
 
     def load(self) -> list[Account]:
         if not self.path.exists():
@@ -204,19 +279,8 @@ class AccountStore:
         return [Account.from_dict(item) for item in data.get("accounts", [])]
 
     def _save(self, accounts: list[Account]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        tmp = self.path.with_suffix(".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(
-                {"version": 1, "accounts": [asdict(a) for a in accounts]},
-                fh,
-                indent=2,
-                ensure_ascii=False,
-            )
-        os.replace(tmp, self.path)
-
-    # -- operaciones ---------------------------------------------------
+        _write_private_json(
+            self.path, {"version": 2, "accounts": [asdict(a) for a in accounts]})
 
     def get(self, account_id: str) -> Account | None:
         return next((a for a in self.load() if a.id == account_id), None)
@@ -227,12 +291,12 @@ class AccountStore:
         accounts = self.load()
         existing = next((i for i, a in enumerate(accounts) if a.id == account.id), None)
         duplicate = next((a for a in accounts if a.id != account.id
-                          and a.url_pattern.strip().lower() == account.url_pattern.strip().lower()
-                          and a.username.strip().lower() == account.username.strip().lower()), None)
+                          and a.name.lower() == account.name.lower()
+                          and a.username.lower() == account.username.lower()), None)
         if duplicate:
             who = f"el usuario «{account.username}»" if account.username else "sin usuario"
             raise ValueError(
-                f"Ya existe la cuenta «{duplicate.name}» con esa URL y {who}. "
+                f"Ya existe la cuenta «{duplicate.name}» con {who}. "
                 "Indica un email o usuario distinto para diferenciarlas.")
         if existing is None and not secret:
             raise ValueError("El secreto es obligatorio para una cuenta nueva")
@@ -249,9 +313,20 @@ class AccountStore:
         self._save([a for a in self.load() if a.id != account_id])
         self.secrets.delete(account_id)
 
-    def match(self, url: str) -> list[Account]:
-        """Cuentas cuyo patrón encaja con ``url``."""
-        return [a for a in self.load() if url_matches(a.url_pattern, url)]
+    def learn(self, account_id: str, *, host: str = "", title: str = "") -> None:
+        """Recuerda que ``account_id`` se usa en ``host`` o en la ventana ``title``."""
+        accounts = self.load()
+        account = next((a for a in accounts if a.id == account_id), None)
+        if account is None:
+            return
+        host, title = normalize_site(host), clean_title(title)
+        if host and not account.matches_host(host):
+            account.sites.append(host)
+        elif title and not host and title not in account.window_titles:
+            account.window_titles = [title, *account.window_titles][:MAX_LEARNED_TITLES]
+        else:
+            return
+        self._save(accounts)
 
     def code(self, account: Account) -> tuple[str, int]:
         """Devuelve ``(código, segundos_restantes)`` de la cuenta."""

@@ -1,56 +1,44 @@
 #!/usr/bin/env bash
-# Test end-to-end: carga la extensión en Chromium (Playwright), usa el host
-# nativo real y el llavero real, y comprueba que la página demo recibe el
-# código correcto de la cuenta correcta cuando dos usuarios comparten URL:
-# campo único, 6 cajas, paso del código en otra página y selector de cuentas.
+# Test end-to-end del modo automático y del atajo, sin extensión.
 #
-# Requisitos: node >= 18 y un Chromium de Playwright
-#   (npx playwright install chromium). Chrome de marca no sirve: desde la
-#   v137 ignora --load-extension.
+# Todo ocurre en una sesión aislada: pantalla virtual (Xvfb), D-Bus y bus de
+# accesibilidad propios y secretos en un fichero temporal; no toca tu
+# escritorio ni tu llavero.
 #
-# Uso: tests/e2e/run.sh
+# Requisitos: xvfb, dbus, at-spi2-core y un Chromium o Chrome.
+# Por defecto usa el último Chromium de Playwright (npx playwright install
+# chromium); otro navegador con: CHROME=/ruta/al/chrome tests/e2e/run.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-WORK="$(mktemp -d)"
-PORT=8765
-SECRET_ANA=JBSWY3DPEHPK3PXP
-SECRET_LUIS=GEZDGNBVGY3TQOJQ
-export XDG_CONFIG_HOME="$WORK/config" PYTHONPATH="$ROOT"
 
-cleanup() {
-  python3 -c "
-from totp_autofill.store import AccountStore
-s = AccountStore()
-for a in s.load(): s.delete(a.id)" || true
-  [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true
-  rm -rf "$WORK"
-}
-trap cleanup EXIT
+if [ -z "${CHROME:-}" ]; then
+  CHROME="$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux64/chrome 2>/dev/null \
+    | sort -t- -k2 -n | tail -1)"
+  CHROME="${CHROME:-$(command -v chromium || command -v google-chrome || true)}"
+fi
+[ -x "$CHROME" ] || { echo "No encuentro Chromium; indica CHROME=/ruta" >&2; exit 1; }
+export CHROME
 
-# Host nativo apuntando a la configuración temporal.
-cat > "$WORK/host.sh" <<SH
-#!/bin/sh
-XDG_CONFIG_HOME="$XDG_CONFIG_HOME" PYTHONPATH="$ROOT" exec python3 -m totp_autofill host
-SH
-chmod +x "$WORK/host.sh"
-mkdir -p "$WORK/profile/NativeMessagingHosts"
-cat > "$WORK/profile/NativeMessagingHosts/com.github.tinogm97.totp_autofill.json" <<JSON
-{"name": "com.github.tinogm97.totp_autofill", "description": "e2e", "type": "stdio",
- "path": "$WORK/host.sh",
- "allowed_origins": ["chrome-extension://blnffoflcmdajflilndalbfcgeddaakd/"]}
-JSON
-
-# Dos cuentas con la misma URL (solo host:puerto), distinguidas por usuario.
-python3 -m totp_autofill add "Demo Ana" "localhost:$PORT" --user ana@demo.com \
-  --secret "$SECRET_ANA" --auto-submit
-python3 -m totp_autofill add "Demo Luis" "localhost:$PORT" --user luis@demo.com \
-  --secret "$SECRET_LUIS" --auto-submit
-
-python3 -m http.server "$PORT" --directory "$ROOT/examples" >/dev/null 2>&1 &
-SERVER_PID=$!
-
-(cd "$WORK" && npm init -y >/dev/null && npm i playwright-core >/dev/null 2>&1)
-cp "$ROOT/tests/e2e/e2e.mjs" "$WORK/"
-(cd "$WORK" && ROOT="$ROOT" PROFILE="$WORK/profile" PORT="$PORT" \
-  SECRET_ANA="$SECRET_ANA" SECRET_LUIS="$SECRET_LUIS" node e2e.mjs)
+# Primero la pantalla y luego el bus: así los servicios que arranca el bus
+# (p. ej. el registro de accesibilidad) conocen DISPLAY.
+# Aislamiento total del escritorio real:
+# - HOME y XDG_* temporales: si algo arranca un llavero, portal, etc. dentro
+#   de la sesión de prueba, trabaja sobre carpetas vacías y no sobre las tuyas.
+# - Chrome con --password-store=basic (en e2e.py): no usa ningún llavero.
+# - QT_ACCESSIBILITY y GTK_MODULES como en una sesión de Ubuntu: sin
+#   QT_ACCESSIBILITY=1 Chrome no se conecta a la accesibilidad.
+# - Los secretos de las cuentas de prueba van a un fichero temporal
+#   (TOTP_AUTOFILL_TEST_SECRETS), nunca al llavero.
+SANDBOX="$(mktemp -d)"
+trap 'rm -rf "$SANDBOX"' EXIT
+mkdir -p "$SANDBOX/home" "$SANDBOX/runtime"
+chmod 700 "$SANDBOX/runtime"
+env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" CHROME="$CHROME" \
+  HOME="$SANDBOX/home" XDG_RUNTIME_DIR="$SANDBOX/runtime" \
+  XDG_CONFIG_HOME="$SANDBOX/home/.config" XDG_DATA_HOME="$SANDBOX/home/.local/share" \
+  XDG_CACHE_HOME="$SANDBOX/home/.cache" XDG_SESSION_TYPE=x11 \
+  QT_ACCESSIBILITY=1 GTK_MODULES=gail:atk-bridge \
+  TOTP_AUTOFILL_DEBUG="${TOTP_AUTOFILL_DEBUG:-}" \
+  xvfb-run -a -s "-screen 0 1280x900x24" \
+  dbus-run-session -- python3 "$ROOT/tests/e2e/e2e.py"

@@ -1,8 +1,7 @@
-"""Genera los iconos de la app y de la extensión (requiere pycairo).
+"""Genera los iconos de la app (requiere pycairo).
 
-- ``totp_autofill/icons/``: PNG de 16 a 512 px y SVG escalable. Van dentro del
-  paquete para que la ventana los cargue sin depender del tema de iconos.
-- ``extension/icons/``: PNG de 16, 32, 48 y 128 px.
+``totp_autofill/icons/``: PNG de 16 a 512 px y SVG escalable. Van dentro del
+paquete para que la ventana los cargue sin depender del tema de iconos.
 
 Uso: python3 scripts/make_icons.py
 """
@@ -14,7 +13,6 @@ import cairo
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
-EXTENSION_SIZES = (16, 32, 48, 128)
 
 
 def draw(ctx: cairo.Context, s: float) -> None:
@@ -67,6 +65,4 @@ if __name__ == "__main__":
     for size in APP_SIZES:
         png(size, app_dir / f"totp-autofill-{size}.png")
     svg(app_dir / "totp-autofill.svg")
-    for size in EXTENSION_SIZES:
-        png(size, ROOT / "extension" / "icons" / f"icon-{size}.png")
     print("Iconos generados.")
