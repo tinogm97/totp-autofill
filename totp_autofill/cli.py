@@ -99,7 +99,8 @@ def cmd_delete(args) -> int:
 def cmd_install_browser(args) -> int:
     from .browser_integration import install
 
-    written = install(Path(args.host_path), args.extension_id)
+    written = install(Path(args.host_path), args.extension_id,
+                      [Path(d).expanduser() for d in args.browser_dir])
     if not written:
         print("No se detectó ningún navegador compatible.", file=sys.stderr)
         return 1
@@ -163,6 +164,9 @@ def build_parser() -> argparse.ArgumentParser:
                       help="ruta absoluta al ejecutable totp-autofill-host")
     inst.add_argument("--extension-id", action="append", default=[],
                       help="ID adicional de extensión Chromium permitido")
+    inst.add_argument("--browser-dir", action="append", default=[],
+                      help="carpeta de datos de un Chrome lanzado con "
+                           "--user-data-dir fuera de ~/.config")
     inst.set_defaults(func=cmd_install_browser)
 
     sub.add_parser("uninstall-browser", help="eliminar el registro del host nativo"

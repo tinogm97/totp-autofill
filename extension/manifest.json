@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TOTP Autofill",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Rellena automáticamente los códigos 2FA (TOTP) en los formularios configurados en la app de escritorio TOTP Autofill.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2Y7lsZcOkSDej1zBCn/ffnX7beM8bdCcquRRKaEc9aG5vBsTFrfcXygXZgTZRPMShGwsy3TpskDuKQqWkqi5KK1+7aeaGzSQAP9ya0IYD3XdOvHcM+NM0Q5T378V/SSzLYyqbPBuVlvXWmmX/HEbQiN/nejPOw3QeZ8zTNpK7KWuo+P6M3f2yghAZSJSIedTi63S997Wy9jnwDuk96uSrqHc32kvQ7y9Dv4jcD/SzuMdV+HI3lKJ+lcSbTsSGuHgsZS5rn/irEcJN5vXo98n5JDb5jktrRzaURmI7Hbyw/kAEtICSysdRrhsYBnqOlP01BAUxS0nvYX48yFdi/YiOQIDAQAB",
   "icons": {

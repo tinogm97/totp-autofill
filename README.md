@@ -106,7 +106,7 @@ El script **no necesita `sudo`**. Instala todo en tu usuario:
 | App y extensión | `~/.local/share/totp-autofill/` |
 | Comando `totp-autofill` | `~/.local/bin/totp-autofill` |
 | Lanzador del menú | `~/.local/share/applications/totp-autofill.desktop` |
-| Registro del host nativo | `~/.config/google-chrome/NativeMessagingHosts/`, `~/.mozilla/native-messaging-hosts/`, … |
+| Registro del host nativo | `~/.config/google-chrome/NativeMessagingHosts/`, `~/.mozilla/native-messaging-hosts/` y la carpeta de cualquier Chrome con `--user-data-dir` en `~/.config` |
 
 > El host solo se registra en los navegadores que hayas abierto al menos una
 > vez (tiene que existir su carpeta de configuración). Si instalas un
@@ -322,6 +322,13 @@ totp-autofill uninstall-browser
 Vuelve a ejecutar `./install.sh` con el navegador ya abierto alguna vez, y
 reinicia el navegador por completo. Comprueba que existe el fichero
 `~/.config/google-chrome/NativeMessagingHosts/com.github.tinogm97.totp_autofill.json`.
+
+**Uso un Chrome aparte lanzado con `--user-data-dir`** (p. ej. un perfil para
+la VPN). Chrome busca el host dentro de esa carpeta. `install.sh` detecta
+automáticamente cualquier carpeta de datos de Chrome/Chromium dentro de
+`~/.config`; si la tuya está en otro sitio:
+`totp-autofill install-browser --host-path ~/.local/share/totp-autofill/totp-autofill-host --browser-dir /ruta/a/la/carpeta`.
+Reinicia ese navegador después.
 
 **"Access to the specified native messaging host is forbidden".**
 La extensión tiene otro ID. Asegúrate de que el manifiesto conserva el campo

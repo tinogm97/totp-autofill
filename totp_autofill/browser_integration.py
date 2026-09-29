@@ -18,17 +18,45 @@ CHROME_EXTENSION_ID = "blnffoflcmdajflilndalbfcgeddaakd"
 # ID de la extensión en Firefox (browser_specific_settings.gecko.id).
 FIREFOX_EXTENSION_ID = "totp-autofill@tinogm97.github.io"
 
-_HOME = Path.home()
-CHROMIUM_DIRS = {
-    "Google Chrome": _HOME / ".config/google-chrome/NativeMessagingHosts",
-    "Chromium": _HOME / ".config/chromium/NativeMessagingHosts",
-    "Brave": _HOME / ".config/BraveSoftware/Brave-Browser/NativeMessagingHosts",
-    "Microsoft Edge": _HOME / ".config/microsoft-edge/NativeMessagingHosts",
-    "Vivaldi": _HOME / ".config/vivaldi/NativeMessagingHosts",
-}
-FIREFOX_DIRS = {
-    "Firefox": _HOME / ".mozilla/native-messaging-hosts",
-}
+# Carpetas de datos estándar de navegadores Chromium (relativas a $HOME).
+CHROMIUM_DATA_DIRS = [
+    ".config/google-chrome",
+    ".config/google-chrome-beta",
+    ".config/google-chrome-unstable",
+    ".config/chromium",
+    ".config/BraveSoftware/Brave-Browser",
+    ".config/microsoft-edge",
+    ".config/vivaldi",
+]
+FIREFOX_HOST_DIR = ".mozilla/native-messaging-hosts"
+
+
+def chromium_host_dirs(home: Path | None = None,
+                       extra_data_dirs: list[Path] | None = None) -> list[Path]:
+    """Carpetas ``NativeMessagingHosts`` de todos los navegadores Chromium.
+
+    Chrome busca el host dentro de su carpeta de datos, así que un navegador
+    lanzado con ``--user-data-dir`` (p. ej. un Chrome aparte para la VPN)
+    necesita su propio registro. Además de las carpetas estándar, se detecta
+    cualquier carpeta de ``~/.config`` con un perfil de navegador
+    (``Local State`` + ``Default/Preferences``). Las apps Electron (VS Code,
+    etc.) también tienen ``Local State`` pero no ``Default/``, y se ignoran.
+    """
+    home = home or Path.home()
+    candidates = [home / d for d in CHROMIUM_DATA_DIRS]
+    config = home / ".config"
+    if config.is_dir():
+        for pattern in ("*/Local State", "*/*/Local State"):
+            candidates += sorted(p.parent for p in config.glob(pattern)
+                                 if (p.parent / "Default" / "Preferences").is_file())
+    candidates += list(extra_data_dirs or [])
+
+    dirs: list[Path] = []
+    for data_dir in candidates:
+        target = data_dir / "NativeMessagingHosts"
+        if data_dir.is_dir() and target not in dirs:
+            dirs.append(target)
+    return dirs
 
 
 def _write_manifest(directory: Path, manifest: dict) -> Path:
@@ -38,36 +66,41 @@ def _write_manifest(directory: Path, manifest: dict) -> Path:
     return target
 
 
-def install(host_path: Path, extra_chrome_ids: list[str] | None = None) -> list[Path]:
+def install(host_path: Path, extra_chrome_ids: list[str] | None = None,
+            extra_data_dirs: list[Path] | None = None,
+            home: Path | None = None) -> list[Path]:
     """Registra el host en todos los navegadores detectados.
 
-    Se escribe el manifiesto si existe la carpeta de configuración del
-    navegador (es decir, si el navegador está instalado y se ha abierto).
+    Se escribe el manifiesto si existe la carpeta de datos del navegador (es
+    decir, si está instalado y se ha abierto alguna vez). ``extra_data_dirs``
+    permite indicar carpetas ``--user-data-dir`` fuera de ``~/.config``.
     """
+    home = home or Path.home()
     host_path = host_path.resolve()
     chrome_ids = [CHROME_EXTENSION_ID, *(extra_chrome_ids or [])]
     base = {"name": HOST_NAME, "description": DESCRIPTION,
             "path": str(host_path), "type": "stdio"}
 
     written = []
-    for directory in CHROMIUM_DIRS.values():
-        if directory.parent.exists():
-            written.append(_write_manifest(directory, {
-                **base,
-                "allowed_origins": [f"chrome-extension://{i}/" for i in chrome_ids],
-            }))
-    for directory in FIREFOX_DIRS.values():
-        if directory.parent.exists():
-            written.append(_write_manifest(directory, {
-                **base, "allowed_extensions": [FIREFOX_EXTENSION_ID],
-            }))
+    for directory in chromium_host_dirs(home, extra_data_dirs):
+        written.append(_write_manifest(directory, {
+            **base,
+            "allowed_origins": [f"chrome-extension://{i}/" for i in chrome_ids],
+        }))
+    firefox = home / FIREFOX_HOST_DIR
+    if firefox.parent.exists():
+        written.append(_write_manifest(firefox, {
+            **base, "allowed_extensions": [FIREFOX_EXTENSION_ID],
+        }))
     return written
 
 
-def uninstall() -> list[Path]:
+def uninstall(extra_data_dirs: list[Path] | None = None,
+              home: Path | None = None) -> list[Path]:
     """Elimina los manifiestos instalados."""
+    home = home or Path.home()
     removed = []
-    for directory in [*CHROMIUM_DIRS.values(), *FIREFOX_DIRS.values()]:
+    for directory in [*chromium_host_dirs(home, extra_data_dirs), home / FIREFOX_HOST_DIR]:
         target = directory / f"{HOST_NAME}.json"
         if target.exists():
             target.unlink()

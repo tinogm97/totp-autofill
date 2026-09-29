@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1 — 2026-09-29
+
+- El instalador registra el host también en navegadores Chromium lanzados
+  con `--user-data-dir` (cualquier carpeta de `~/.config` con perfil de
+  navegador) y admite `--browser-dir` para carpetas en otro sitio. Antes, un
+  Chrome con carpeta de datos propia mostraba "Specified native messaging
+  host not found".
+
 ## 1.1.0 — 2026-09-29
 
 - Las cuentas tienen **email/usuario** (campo «Cuenta / email» en la app,
