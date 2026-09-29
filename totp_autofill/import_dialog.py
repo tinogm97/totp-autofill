@@ -89,12 +89,15 @@ class ImportDialog(Gtk.Dialog):
     # -- cámara ------------------------------------------------------------
 
     def _fill_cameras(self) -> None:
+        problem = ""
         try:
             from .camera import list_cameras
 
             self.cameras = list_cameras()
-        except Exception:  # noqa: BLE001 - sin GStreamer: solo imágenes y texto
+        except (ImportError, ValueError):  # sin GStreamer: solo imágenes y texto
             self.cameras = []
+            problem = ("Para usar la cámara instala: sudo apt install gir1.2-gstreamer-1.0 "
+                       "gir1.2-gst-plugins-base-1.0 gstreamer1.0-gtk3 gstreamer1.0-plugins-good")
         for name, _device in self.cameras:
             self.camera_combo.append_text(name)
         if self.cameras:
@@ -103,6 +106,11 @@ class ImportDialog(Gtk.Dialog):
             self.camera_combo.append_text("No se encontró ninguna cámara")
             self.camera_combo.set_active(0)
             self.camera_button.set_sensitive(False)
+        if not qr.available():
+            problem = "Para leer QR instala: sudo apt install libzbar0"
+        if problem:
+            self.camera_combo.set_tooltip_text(problem)
+            GLib.idle_add(self._set_status, "⚠ " + GLib.markup_escape_text(problem))
         if not qr.available():
             self.camera_button.set_sensitive(False)
 

@@ -173,7 +173,7 @@ cada una te preguntará en qué sitio va y lo recordará.
 
 Necesita `libzbar0` (lectura de QR) y, para la cámara, GStreamer con
 `gstreamer1.0-gtk3`; en Ubuntu Desktop suelen venir instalados. Si no:
-`sudo apt install libzbar0 gir1.2-gstreamer-1.0 gstreamer1.0-gtk3 gstreamer1.0-plugins-good`.
+`sudo apt install libzbar0 gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-gtk3 gstreamer1.0-plugins-good`.
 
 ## Cómo elige la cuenta
 

@@ -36,6 +36,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq python3-gi gir1.2-gtk-3.0 gir1.2-secret-1 \
             gir1.2-atspi-2.0 at-spi2-core libxtst6 xvfb dbus-x11 libzbar0 \
-            gir1.2-gstreamer-1.0 gstreamer1.0-gtk3 gstreamer1.0-plugins-good >/dev/null
+            gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-gtk3 gstreamer1.0-plugins-good >/dev/null
       - name: Test end-to-end (Chrome real, sesión aislada)
         run: CHROME="$(command -v google-chrome)" PATH=/usr/bin:/bin:/usr/local/bin tests/e2e/run.sh
