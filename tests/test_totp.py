@@ -59,11 +59,15 @@ class OtpAuthUriTest(unittest.TestCase):
         self.assertEqual(info.secret, "JBSWY3DPEHPK3PXP")
         self.assertEqual(info.issuer, "ACME Co")
         self.assertEqual(info.label, "ACME Co:john@example.com")
+        self.assertEqual(info.account, "john@example.com")
         self.assertEqual((info.digits, info.period, info.algorithm), (8, 60, "SHA256"))
 
     def test_issuer_from_label(self):
         info = parse_otpauth_uri("otpauth://totp/GitHub:tino?secret=JBSWY3DPEHPK3PXP")
         self.assertEqual(info.issuer, "GitHub")
+        self.assertEqual(info.account, "tino")
+        self.assertEqual(parse_otpauth_uri(
+            "otpauth://totp/ana@x.com?secret=JBSWY3DPEHPK3PXP").account, "ana@x.com")
         self.assertEqual((info.digits, info.period, info.algorithm), (6, 30, "SHA1"))
 
     def test_rejects_invalid(self):

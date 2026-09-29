@@ -44,8 +44,8 @@ nativo). El navegador lanza `totp-autofill-host` y le habla por stdin/stdout.
 | Petición | Respuesta |
 |---|---|
 | `{"type": "ping"}` | `{"ok": true, "version": "1.0.0"}` |
-| `{"type": "patterns"}` | `{"ok": true, "patterns": ["https://…/mfa*"]}` |
-| `{"type": "match", "url": U}` | `{"ok": true, "accounts": [{"id", "name", "selector", "autoSubmit", "digits"}]}` |
+| `{"type": "patterns"}` | `{"ok": true, "patterns": ["https://…/mfa*"], "users": ["ana@x.com"]}` |
+| `{"type": "match", "url": U}` | `{"ok": true, "accounts": [{"id", "name", "username", "selector", "autoSubmit", "digits"}]}` |
 | `{"type": "code", "id": I, "url": U}` | `{"ok": true, "code": "123456", "remaining": 17}` |
 | cualquier error | `{"ok": false, "error": "mensaje"}` |
 
@@ -54,7 +54,9 @@ nativo). El navegador lanza `totp-autofill-host` y le habla por stdin/stdout.
 ## Almacenamiento
 
 - **`~/.config/totp-autofill/accounts.json`** (permisos `600`, escritura
-  atómica con `os.replace`):
+  atómica con `os.replace`). No puede haber dos cuentas con el mismo
+  `url_pattern` y `username` (sin distinguir mayúsculas). Los ficheros de la
+  v1.0 sin `username` se leen sin problema:
 
   ```json
   {
@@ -63,6 +65,7 @@ nativo). El navegador lanza `totp-autofill-host` y le habla por stdin/stdout.
       {
         "name": "VPN Empresa",
         "url_pattern": "https://sso.empresa.com/mfa*",
+        "username": "tino@empresa.com",
         "selector": "",
         "auto_submit": false,
         "digits": 6,
@@ -87,6 +90,7 @@ coinciden.
 
 1. Solo `*` es comodín (→ `.*`); todo lo demás se escapa.
 2. Sin `://` en el patrón se antepone `*://`.
+   Si tras el esquema no hay `/` (solo host), se añade `/*`.
 3. Sin `?` ni `#` en el patrón, se quitan query y fragmento de la URL.
 4. Comparación sin distinguir mayúsculas, anclada al principio y al final.
 
@@ -109,6 +113,24 @@ Protecciones contra efectos no deseados:
 - Máximo 2 rellenos automáticos por URL, para no entrar en bucle de envíos
   si el servicio rechaza el código y vuelve a pintar el formulario.
 - Si al código le quedan < 3 s, espera al siguiente periodo.
+
+## Elección de cuenta cuando varias comparten URL
+
+`match` puede devolver varias cuentas (p. ej. varios usuarios de prueba en
+`localhost:4200`). `pickAccount()` en `content.js` decide:
+
+1. Si solo hay una, esa.
+2. El usuario escrito en esta página (`typedUser`): se captura en los eventos
+   `change` y `submit` de campos que parecen de usuario/email.
+3. El usuario recordado para la pestaña (`rememberedUser`): el content script
+   envía `{type: "user", value}` y **background.js solo lo guarda si coincide
+   con un usuario configurado** (lista `users` de `patterns`), en
+   `storage.session` con clave `user:<tabId>` (se borra al cerrar la pestaña).
+   Va por pestaña y no por origen para cubrir logins en otro dominio (SSO).
+4. Un único usuario configurado que aparezca en el texto de la página o en el
+   valor de algún input.
+5. Si nada decide, `showChooser()` pinta un selector (en shadow DOM, para que
+   el CSS de la página no le afecte) bajo el campo del código.
 
 ## ID fijo de la extensión
 

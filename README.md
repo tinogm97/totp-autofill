@@ -13,8 +13,12 @@ mirar el móvil.
 - 🌐 **Extensión para Chrome, Chromium, Brave, Edge y Firefox** que detecta el
   campo del código, incluidos formularios que aparecen tras el login (SPA) y
   los de "6 cajitas".
-- ⚙️ **Configuración por URL** con comodines (`https://sso.empresa.com/mfa*`),
-  selector CSS opcional y envío automático.
+- ⚙️ **Configuración por URL** con comodines (`https://sso.empresa.com/mfa*`)
+  o por sitio completo (`localhost:4200`), selector CSS opcional y envío
+  automático.
+- 👥 **Varias cuentas en la misma URL** (ideal para entornos de desarrollo):
+  cada cuenta va asociada a un email/usuario y se rellena la del usuario con
+  el que inicias sesión; si no se puede saber, te deja elegir.
 - 🧩 **Sin dependencias externas**: Python 3 + GTK 3 del sistema; el TOTP
   (RFC 6238) está implementado con la librería estándar.
 - ⌨️ **App gráfica, CLI, popup y atajo de teclado** (`Alt+Shift+2`).
@@ -35,13 +39,14 @@ mirar el móvil.
 4. [Instalar la extensión](#instalar-la-extensión)
 5. [Configurar una cuenta](#configurar-una-cuenta)
 6. [Patrones de URL](#patrones-de-url)
-7. [Detección del campo del código](#detección-del-campo-del-código)
-8. [Uso diario](#uso-diario)
-9. [Línea de comandos](#línea-de-comandos)
-10. [Seguridad](#seguridad)
-11. [Solución de problemas](#solución-de-problemas)
-12. [Desarrollo](#desarrollo)
-13. [Desinstalar](#desinstalar)
+7. [Varias cuentas en la misma URL](#varias-cuentas-en-la-misma-url)
+8. [Detección del campo del código](#detección-del-campo-del-código)
+9. [Uso diario](#uso-diario)
+10. [Línea de comandos](#línea-de-comandos)
+11. [Seguridad](#seguridad)
+12. [Solución de problemas](#solución-de-problemas)
+13. [Desarrollo](#desarrollo)
+14. [Desinstalar](#desinstalar)
 
 ---
 
@@ -60,8 +65,9 @@ mirar el móvil.
 └─────────────────────────────────────────┘        └──────────────────────────┘
 ```
 
-1. En la app de escritorio configuras una cuenta: **nombre**, **URL del
-   formulario** y **secreto TOTP** (el mismo que escaneaste con el QR).
+1. En la app de escritorio configuras una cuenta: **nombre**, **email o
+   usuario**, **URL del formulario** y **secreto TOTP** (el mismo que
+   escaneaste con el QR).
 2. Al cargar una página, la extensión comprueba si su URL encaja con algún
    patrón configurado. Si no, no hace nada más.
 3. Si encaja, busca el campo del código (o espera a que aparezca) y pide el
@@ -165,8 +171,9 @@ Abre **TOTP Autofill** desde el menú de aplicaciones y pulsa **+**:
 | Campo | Descripción |
 |---|---|
 | **Nombre** | Descriptivo, p. ej. `VPN Empresa`. |
-| **URL del formulario** | Dirección de la página que pide el código. Admite `*`. Ver [Patrones de URL](#patrones-de-url). |
-| **Secreto** | Secreto Base32 o URI `otpauth://`. Con URI se rellenan solos nombre, dígitos, periodo y algoritmo. |
+| **Cuenta / email** | El email o usuario con el que inicias sesión. Opcional si es la única cuenta de esa URL; **necesario** para distinguir varias cuentas en la misma URL. |
+| **URL del formulario** | Dirección de la página que pide el código. Admite `*`; un host solo (`localhost:4200`) abarca todo el sitio. Ver [Patrones de URL](#patrones-de-url). |
+| **Secreto** | Secreto Base32 o URI `otpauth://`. Con URI se rellenan solos nombre, email, dígitos, periodo y algoritmo. |
 | **Selector CSS** | *Opcional.* Solo si la detección automática no encuentra el campo. |
 | **Enviar automáticamente** | Pulsa el botón del formulario tras escribir el código. |
 | **Opciones avanzadas** | Dígitos (6–8), periodo (30 s) y algoritmo (SHA1). Cámbialos solo si el servicio lo indica. |
@@ -180,12 +187,15 @@ la parte variable por `*`, por ejemplo `https://login.empresa.com/mfa/*`.
 - `*` significa "cualquier cosa" (incluido nada). El resto de caracteres,
   incluidos `.` y `?`, se comparan literalmente.
 - Si no pones esquema (`https://`), vale cualquiera.
+- Si pones **solo el host** (`localhost:4200`, `app.empresa.com`), abarca
+  todas las páginas de ese sitio.
 - Si el patrón **no** contiene `?` ni `#`, se ignoran la *query* y el
   *fragmento* de la URL.
 - No distingue mayúsculas y minúsculas.
 
 | Patrón | Encaja | No encaja |
 |---|---|---|
+| `localhost:4200` | `http://localhost:4200/login`, `http://localhost:4200/#/2fa` | `http://localhost:4201/login` |
 | `https://sso.empresa.com/mfa` | `https://sso.empresa.com/mfa?next=/home` | `https://sso.empresa.com/mfa/paso2` |
 | `https://sso.empresa.com/mfa*` | `…/mfa`, `…/mfa/paso2` | `https://otra.com/mfa` |
 | `https://*.empresa.com/2fa` | `https://vpn.empresa.com/2fa` | `https://empresa.com.malo.com/2fa` ✱ |
@@ -196,6 +206,34 @@ la parte variable por `*`, por ejemplo `https://login.empresa.com/mfa/*`.
 **sí** encajaría con `https://malaempresa.com/`. Escribe el dominio lo más
 concreto posible. La app de escritorio nunca entrega un código si la URL real
 de la página no encaja con el patrón de la cuenta.
+
+## Varias cuentas en la misma URL
+
+Típico de desarrollo: `localhost:4200` sirve para iniciar sesión con varios
+usuarios de prueba, cada uno con su propio 2FA. Crea una cuenta por usuario
+con la **misma URL** y un **email distinto**:
+
+```bash
+totp-autofill add "Portal dev" localhost:4200 --user ana@empresa.com
+totp-autofill add "Portal dev" localhost:4200 --user admin@empresa.com --auto-submit
+```
+
+Cuando llegas a la pantalla del código, la extensión elige la cuenta así:
+
+1. **El email/usuario que escribiste al iniciar sesión**, en esta página o en
+   una anterior de la misma pestaña (aunque el login esté en otro dominio,
+   p. ej. un Keycloak en `localhost:8080`).
+2. **El email que aparezca en la página** ("Introduce el código para
+   ana@empresa.com").
+3. Si no puede decidir, muestra un **selector** bajo el campo del código para
+   que elijas la cuenta. También puedes elegirla desde el popup.
+
+No se pueden crear dos cuentas con la misma URL y el mismo usuario (la app
+avisa).
+
+> Para reconocer al usuario, la extensión mira lo que escribes en campos de
+> email/usuario, pero **solo lo recuerda si coincide con un usuario
+> configurado**, y solo en memoria mientras la pestaña está abierta.
 
 ## Detección del campo del código
 
@@ -223,7 +261,8 @@ varios campos, se escribe un dígito en cada uno.
   rechaza). Si al código le quedan menos de 3 s de validez, espera al
   siguiente.
 - **Popup:** pulsa el icono de la extensión para ver si está conectada con la
-  app y rellenar el código manualmente (útil si lo borraste o falló).
+  app, ver las cuentas de la página (marca la *detectada*) y rellenar el
+  código manualmente con la que elijas.
 - **Atajo:** `Alt+Shift+2` rellena el código en la página actual. Puedes
   cambiarlo en `chrome://extensions/shortcuts`.
 - **App de escritorio:** muestra todos los códigos con su cuenta atrás y
@@ -234,11 +273,13 @@ varios campos, se escribe un dígito en cada uno.
 ```bash
 totp-autofill                      # abre la app gráfica
 totp-autofill list                 # lista las cuentas
-totp-autofill add "GitHub" "github.com/sessions/two-factor*" --auto-submit
+totp-autofill add "GitHub" "github.com/sessions/two-factor*" --user tino --auto-submit
                                    # pide el secreto sin mostrarlo
+totp-autofill add "Portal dev" localhost:4200 --user ana@empresa.com
 totp-autofill add "VPN" "https://vpn.empresa.com/mfa*" \
     --uri "otpauth://totp/Empresa:yo?secret=...&issuer=Empresa"
 totp-autofill code GitHub          # 123456  (válido 17s)
+totp-autofill code ana@empresa.com # también por email/usuario
 totp-autofill code GitHub -q | xclip -sel clip
 totp-autofill delete GitHub
 totp-autofill install-browser --host-path ~/.local/share/totp-autofill/totp-autofill-host
@@ -254,7 +295,10 @@ totp-autofill uninstall-browser
 - Los secretos TOTP están en el **llavero del sistema** (cifrado con tu
   contraseña de sesión). `accounts.json` solo tiene nombres, URLs y
   selectores, con permisos `600`.
-- La extensión **nunca recibe secretos**, solo el código del momento.
+- La extensión **nunca recibe secretos**, solo el código del momento (y los
+  nombres, emails y URLs de las cuentas, para saber cuál usar).
+- Lo que escribes en campos de usuario solo se recuerda si coincide con un
+  email configurado, en memoria de sesión del navegador y por pestaña.
 - La URL de la página la aporta el navegador (`sender.url`), no la página. La
   app de escritorio vuelve a comprobar que la URL encaja con el patrón de la
   cuenta antes de generar el código, así que una web maliciosa no puede
@@ -349,6 +393,7 @@ Tests:
 python3 -m unittest discover -s tests -v   # unitarios (incluye vectores RFC 6238)
 node tests/url_matches_parity.mjs           # patrones JS y Python se comportan igual
 tests/e2e/run.sh                            # extensión + host reales en Chromium headless
+                                            # (2 usuarios en la misma URL, SPA, multipágina, selector)
 ```
 
 El test end-to-end necesita Node ≥ 18 y un Chromium de Playwright
@@ -359,13 +404,15 @@ Probar la demo a mano:
 
 ```bash
 python3 -m http.server 8765 --directory examples
-totp-autofill add "Demo" "http://localhost:8765/demo-2fa.html" \
-    --secret JBSWY3DPEHPK3PXP --auto-submit
-# abre http://localhost:8765/demo-2fa.html  (o ?split=1 para 6 cajas)
+totp-autofill add "Demo Ana"  localhost:8765 --user ana@demo.com  --secret JBSWY3DPEHPK3PXP --auto-submit
+totp-autofill add "Demo Luis" localhost:8765 --user luis@demo.com --secret GEZDGNBVGY3TQOJQ --auto-submit
+# abre http://localhost:8765/demo-2fa.html y entra con ana@demo.com, luis@demo.com u otro
+# (?split=1 → 6 cajas, ?multipage=1 → el código se pide en otra página)
 ```
 
 Tras cambiar la extensión, recárgala en `chrome://extensions`. Tras cambiar el
-código Python, vuelve a ejecutar `./install.sh`.
+código Python, vuelve a ejecutar `./install.sh` y reinicia la app (ciérrala
+del todo: solo se ejecuta una instancia).
 
 ## Desinstalar
 

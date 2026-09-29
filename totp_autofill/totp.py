@@ -83,6 +83,11 @@ class OtpAuthUri:
     period: int = 30
     algorithm: str = "SHA1"
 
+    @property
+    def account(self) -> str:
+        """Cuenta del label (``Emisor:cuenta`` → ``cuenta``), normalmente un email."""
+        return self.label.split(":", 1)[-1].strip()
+
 
 def parse_otpauth_uri(uri: str) -> OtpAuthUri:
     """Parsea una URI ``otpauth://totp/Issuer:cuenta?secret=...``.

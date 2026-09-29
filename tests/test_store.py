@@ -26,6 +26,14 @@ class UrlMatchesTest(unittest.TestCase):
         self.assertTrue(url_matches("acme.com/2fa", "https://ACME.com/2fa"))
         self.assertTrue(url_matches("acme.com/2fa", "http://acme.com/2fa"))
 
+    def test_host_only_covers_whole_site(self):
+        for url in ("http://localhost:4200/", "http://localhost:4200/login",
+                    "http://localhost:4200/auth/2fa?x=1#/otp"):
+            self.assertTrue(url_matches("localhost:4200", url), url)
+        self.assertTrue(url_matches("http://localhost:4200", "http://localhost:4200/a"))
+        self.assertFalse(url_matches("localhost:4200", "http://localhost:4201/login"))
+        self.assertFalse(url_matches("localhost:4200", "http://localhost:42000/login"))
+
     def test_dots_are_literal(self):
         self.assertFalse(url_matches("https://acme.com/*", "https://acmeXcom/2fa"))
 
@@ -70,6 +78,27 @@ class AccountStoreTest(unittest.TestCase):
         self.store.delete(acc.id)
         self.assertEqual(self.store.load(), [])
         self.assertIsNone(self.secrets.get(acc.id))
+
+    def test_same_url_different_users(self):
+        ana = self.store.save(Account("Dev", "localhost:4200", username="ana@x.com"), SECRET)
+        luis = self.store.save(Account("Dev", "localhost:4200", username="luis@x.com"),
+                               "GEZDGNBVGY3TQOJQ")
+        matched = self.store.match("http://localhost:4200/login")
+        self.assertEqual({a.id for a in matched}, {ana.id, luis.id})
+        self.assertNotEqual(self.store.code(ana)[0], self.store.code(luis)[0])
+
+    def test_duplicate_url_and_user_rejected(self):
+        self.store.save(Account("A", "localhost:4200", username="ana@x.com"), SECRET)
+        with self.assertRaises(ValueError):
+            self.store.save(Account("B", "LOCALHOST:4200 ", username="ANA@x.com"), SECRET)
+        self.store.save(Account("C", "localhost:4201"), SECRET)
+        with self.assertRaises(ValueError):
+            self.store.save(Account("D", "localhost:4201"), SECRET)
+
+    def test_legacy_file_without_username(self):
+        self.path.write_text('{"version": 1, "accounts": [{"name": "Old", '
+                             '"url_pattern": "acme.com", "id": "abc"}]}')
+        self.assertEqual(self.store.load()[0].username, "")
 
     def test_validation(self):
         for bad in (Account("", "acme.com"), Account("x", ""),

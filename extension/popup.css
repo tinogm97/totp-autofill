@@ -12,3 +12,5 @@ button:hover { background: #1d4ed8; }
 .message { min-height: 1em; color: #374151; }
 footer { color: #6b7280; font-size: 11px; }
 kbd { border: 1px solid #d1d5db; border-radius: 3px; padding: 0 3px; font-size: 10px; }
+li small { display: block; color: #2563eb; font-size: 11px; }
+li.suggested span::after { content: " · detectada"; color: #16a34a; font-size: 11px; }

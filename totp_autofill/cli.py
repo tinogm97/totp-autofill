@@ -24,9 +24,12 @@ def _find(store, name_or_id: str):
     for account in accounts:
         if account.id == name_or_id:
             return account
-    matches = [a for a in accounts if a.name.lower() == name_or_id.lower()]
+    key = name_or_id.lower()
+    matches = [a for a in accounts if a.name.lower() == key] or \
+              [a for a in accounts if a.username.lower() == key]
     if len(matches) != 1:
-        sys.exit(f"No se encontró una única cuenta llamada '{name_or_id}'")
+        sys.exit(f"No se encontró una única cuenta con nombre o usuario '{name_or_id}' "
+                 "(usa el id que muestra 'list')")
     return matches[0]
 
 
@@ -50,7 +53,8 @@ def cmd_list(_args) -> int:
     for a in accounts:
         extra = f"  selector={a.selector}" if a.selector else ""
         auto = "  [auto-envío]" if a.auto_submit else ""
-        print(f"{a.name}\n    {a.url_pattern}{extra}{auto}\n    id={a.id}")
+        user = f" <{a.username}>" if a.username else ""
+        print(f"{a.name}{user}\n    {a.url_pattern}{extra}{auto}\n    id={a.id}")
     return 0
 
 
@@ -58,16 +62,18 @@ def cmd_add(args) -> int:
     from .store import Account
     from .totp import parse_otpauth_uri
 
-    secret = args.secret
+    secret, username = args.secret, args.user
     digits, period, algorithm = args.digits, args.period, args.algorithm
     if args.uri:
         info = parse_otpauth_uri(args.uri)
         secret, digits, period, algorithm = (
             info.secret, info.digits, info.period, info.algorithm)
+        username = username or info.account
     if not secret:
         secret = getpass.getpass("Secreto Base32 (no se mostrará): ")
 
-    account = Account(name=args.name, url_pattern=args.url, selector=args.selector,
+    account = Account(name=args.name, url_pattern=args.url, username=username,
+                      selector=args.selector,
                       auto_submit=args.auto_submit, digits=digits, period=period,
                       algorithm=algorithm)
     _store().save(account, secret)
@@ -125,7 +131,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     add = sub.add_parser("add", help="añadir una cuenta")
     add.add_argument("name", help="nombre descriptivo")
-    add.add_argument("url", help="patrón de URL del formulario, admite *")
+    add.add_argument("url", help="patrón de URL del formulario, admite * "
+                     "(p. ej. localhost:4200 o https://sso.empresa.com/mfa*)")
+    add.add_argument("-u", "--user", default="",
+                     help="email o usuario de la cuenta (necesario si varias "
+                          "cuentas comparten URL)")
     src = add.add_mutually_exclusive_group()
     src.add_argument("--secret", help="secreto Base32 (si no, se pide por teclado)")
     src.add_argument("--uri", help="URI otpauth://totp/... del código QR")

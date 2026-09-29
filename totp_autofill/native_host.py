@@ -8,12 +8,13 @@ Mensajes admitidos (campo ``type``):
 ``ping``
     Comprueba la conexión. Respuesta: ``{"ok": true, "version": "..."}``.
 ``patterns``
-    Lista de patrones de URL configurados (sin secretos). La extensión la
-    usa como filtro previo para no consultar al host en cada página.
-    Respuesta: ``{"ok": true, "patterns": ["https://.../mfa*", ...]}``.
+    Patrones de URL y usuarios configurados (sin secretos). La extensión los
+    usa como filtro previo para no consultar al host en cada página, y para
+    reconocer qué usuario se está autenticando.
+    Respuesta: ``{"ok": true, "patterns": ["https://.../mfa*"], "users": ["ana@x.com"]}``.
 ``match`` (``url``)
     Cuentas configuradas para esa URL, **sin secretos**.
-    Respuesta: ``{"ok": true, "accounts": [{id, name, selector, autoSubmit, digits}]}``.
+    Respuesta: ``{"ok": true, "accounts": [{id, name, username, selector, autoSubmit, digits}]}``.
 ``code`` (``url``, ``id``)
     Código TOTP actual de la cuenta ``id``. Solo se entrega si el patrón de
     la cuenta encaja con ``url``, de modo que una página nunca puede obtener
@@ -63,7 +64,12 @@ def handle(message: dict, store: AccountStore) -> dict:
         return {"ok": True, "version": __version__}
 
     if kind == "patterns":
-        return {"ok": True, "patterns": [a.url_pattern for a in store.load()]}
+        accounts = store.load()
+        return {
+            "ok": True,
+            "patterns": [a.url_pattern for a in accounts],
+            "users": sorted({a.username for a in accounts if a.username}),
+        }
 
     if kind == "match":
         return {"ok": True, "accounts": [a.public_info() for a in store.match(url)]}

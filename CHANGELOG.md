@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0 — 2026-09-29
+
+- Las cuentas tienen **email/usuario** (campo «Cuenta / email» en la app,
+  `--user` en la CLI, se rellena solo desde URIs `otpauth://`).
+- **Varias cuentas en la misma URL**: la extensión usa la del usuario con el
+  que se inicia sesión (en la misma página, en una anterior de la pestaña o
+  mostrado en la página) y, si no lo sabe, muestra un selector junto al campo.
+- Patrones de **solo host** (`localhost:4200`) abarcan todo el sitio.
+- La app impide duplicar cuentas con la misma URL y usuario.
+- `totp-autofill code` acepta también el email/usuario.
+- Popup: muestra el email de cada cuenta y marca la detectada.
+- Demo con dos usuarios y modo multipágina; test e2e ampliado.
+
 ## 1.0.0 — 2026-09-29
 
 Primera versión.

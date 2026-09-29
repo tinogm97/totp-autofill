@@ -48,6 +48,8 @@ def url_matches(pattern: str, url: str) -> bool:
     Reglas:
     - ``*`` es comodín. Ej: ``https://login.empresa.com/mfa*``.
     - Si el patrón no indica esquema (``https://``), vale cualquiera.
+    - Si el patrón es solo un host (``localhost:4200``), abarca todo el
+      sitio, como si fuera ``localhost:4200/*``.
     - Si el patrón no contiene ``?`` ni ``#``, se ignoran la query y el
       fragmento de la URL, para que ``/2fa`` encaje con ``/2fa?next=/``.
     """
@@ -56,6 +58,8 @@ def url_matches(pattern: str, url: str) -> bool:
         return False
     if "://" not in pattern:
         pattern = "*://" + pattern
+    if "/" not in pattern.split("://", 1)[1]:
+        pattern += "/*"
     if "?" not in pattern and "#" not in pattern:
         scheme, netloc, path, _query, _fragment = urlsplit(url)
         url = urlunsplit((scheme, netloc, path, "", ""))
@@ -73,6 +77,7 @@ class Account:
 
     name: str
     url_pattern: str
+    username: str = ""  # email o usuario; distingue cuentas con la misma URL
     selector: str = ""  # selector CSS del campo; vacío = detección automática
     auto_submit: bool = False  # enviar el formulario tras rellenar
     digits: int = 6
@@ -81,9 +86,11 @@ class Account:
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def validate(self) -> None:
-        if not self.name.strip():
+        self.name, self.username = self.name.strip(), self.username.strip()
+        self.url_pattern = self.url_pattern.strip()
+        if not self.name:
             raise ValueError("El nombre es obligatorio")
-        if not self.url_pattern.strip():
+        if not self.url_pattern:
             raise ValueError("El patrón de URL es obligatorio")
         if self.digits not in (6, 7, 8):
             raise ValueError("Los dígitos deben ser 6, 7 u 8")
@@ -97,6 +104,7 @@ class Account:
         return {
             "id": self.id,
             "name": self.name,
+            "username": self.username,
             "selector": self.selector,
             "autoSubmit": self.auto_submit,
             "digits": self.digits,
@@ -218,6 +226,14 @@ class AccountStore:
         account.validate()
         accounts = self.load()
         existing = next((i for i, a in enumerate(accounts) if a.id == account.id), None)
+        duplicate = next((a for a in accounts if a.id != account.id
+                          and a.url_pattern.strip().lower() == account.url_pattern.strip().lower()
+                          and a.username.strip().lower() == account.username.strip().lower()), None)
+        if duplicate:
+            who = f"el usuario «{account.username}»" if account.username else "sin usuario"
+            raise ValueError(
+                f"Ya existe la cuenta «{duplicate.name}» con esa URL y {who}. "
+                "Indica un email o usuario distinto para diferenciarlas.")
         if existing is None and not secret:
             raise ValueError("El secreto es obligatorio para una cuenta nueva")
         if secret:

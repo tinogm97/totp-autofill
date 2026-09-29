@@ -18,6 +18,10 @@ const cases = [
   ["https://acme.com/*", "https://acmeXcom/2fa"],
   ["http://localhost:8765/*", "http://localhost:8765/demo-2fa.html"],
   ["*", "https://anything.org/x"],
+  ["localhost:4200", "http://localhost:4200/login"],
+  ["localhost:4200", "http://localhost:4200/"],
+  ["localhost:4200", "http://localhost:42000/login"],
+  ["http://localhost:4200", "http://localhost:4200/auth#/otp"],
   ["", "https://acme.com"],
 ];
 

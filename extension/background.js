@@ -11,7 +11,7 @@ const api = globalThis.browser ?? globalThis.chrome;
 const HOST = "com.github.tinogm97.totp_autofill";
 const PATTERNS_TTL_MS = 15_000;
 
-let patternsCache = { list: [], fetchedAt: 0, error: null };
+let patternsCache = { list: [], users: [], fetchedAt: 0, error: null };
 
 function native(message) {
   return api.runtime.sendNativeMessage(HOST, message);
@@ -19,13 +19,14 @@ function native(message) {
 
 /**
  * Misma semántica que url_matches() en totp_autofill/store.py:
- * `*` es comodín, sin esquema vale cualquiera, y si el patrón no contiene
- * `?` ni `#` se ignoran query y fragmento de la URL.
+ * `*` es comodín, sin esquema vale cualquiera, un host solo abarca todo el
+ * sitio, y si el patrón no contiene `?` ni `#` se ignoran query y fragmento.
  */
 function urlMatches(pattern, url) {
   pattern = pattern.trim();
   if (!pattern || !url) return false;
   if (!pattern.includes("://")) pattern = "*://" + pattern;
+  if (!pattern.split("://")[1].includes("/")) pattern += "/*";
   if (!pattern.includes("?") && !pattern.includes("#")) {
     try {
       const u = new URL(url);
@@ -46,9 +47,14 @@ async function getPatterns(force = false) {
   if (!force && fresh) return patternsCache.list;
   try {
     const res = await native({ type: "patterns" });
-    patternsCache = { list: res.ok ? res.patterns : [], fetchedAt: Date.now(), error: res.ok ? null : res.error };
+    patternsCache = {
+      list: res.ok ? res.patterns : [],
+      users: res.ok ? res.users ?? [] : [],
+      fetchedAt: Date.now(),
+      error: res.ok ? null : res.error,
+    };
   } catch (err) {
-    patternsCache = { list: [], fetchedAt: Date.now(), error: String(err?.message ?? err) };
+    patternsCache = { list: [], users: [], fetchedAt: Date.now(), error: String(err?.message ?? err) };
   }
   return patternsCache.list;
 }
@@ -61,6 +67,36 @@ async function matchAccounts(url) {
   return res.ok ? res.accounts : [];
 }
 
+// ------------------------------------------------ usuario que inicia sesión
+//
+// Cuando varias cuentas comparten URL (p. ej. localhost:4200), hay que saber
+// con qué usuario se está entrando. El content script informa de lo que se
+// escribe en campos de usuario/email; aquí solo se guarda si coincide con un
+// usuario configurado, en memoria de sesión (storage.session) y por pestaña
+// (no por origen), para que sirva aunque el paso del código sea otra página
+// u otro dominio (p. ej. un SSO).
+
+const userKey = (sender) => (sender.tab?.id === undefined ? null : `user:${sender.tab.id}`);
+
+async function rememberUser(value, sender) {
+  const key = userKey(sender);
+  if (!key || !value) return;
+  await getPatterns();
+  const user = patternsCache.users.find((u) => u.toLowerCase() === value.trim().toLowerCase());
+  if (user) await api.storage.session.set({ [key]: user });
+}
+
+async function rememberedUser(sender) {
+  const key = userKey(sender);
+  if (!key) return null;
+  return (await api.storage.session.get(key))[key] ?? null;
+}
+
+api.tabs.onRemoved.addListener((tabId) => {
+  api.storage.session.remove(`user:${tabId}`);
+});
+// ------------------------------------------------------------- mensajes
+
 async function handleMessage(message, sender) {
   // La URL se toma de `sender` (la fija el navegador), nunca del mensaje,
   // para que una página no pueda pedir el código de otra web.
@@ -68,7 +104,14 @@ async function handleMessage(message, sender) {
 
   switch (message?.type) {
     case "match":
-      return { ok: true, accounts: await matchAccounts(url) };
+      return {
+        ok: true,
+        accounts: await matchAccounts(url),
+        rememberedUser: await rememberedUser(sender),
+      };
+    case "user":
+      await rememberUser(String(message.value ?? ""), sender);
+      return { ok: true };
     case "code":
       return await native({ type: "code", id: message.id, url });
     case "status": {

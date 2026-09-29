@@ -19,6 +19,7 @@ APP_TITLE = "TOTP Autofill"
 CSS = b"""
 .code { font-family: monospace; font-size: 22px; font-weight: bold; }
 .pattern { opacity: 0.65; }
+.username { color: @theme_selected_bg_color; }
 """
 
 
@@ -39,7 +40,9 @@ class AccountDialog(Gtk.Dialog):
         self.get_content_area().add(grid)
 
         self.name = Gtk.Entry(placeholder_text="Ej: VPN empresa", hexpand=True)
-        self.url = Gtk.Entry(placeholder_text="https://login.empresa.com/mfa*")
+        self.username = Gtk.Entry(placeholder_text="Ej: tino@empresa.com",
+                                  input_purpose=Gtk.InputPurpose.EMAIL)
+        self.url = Gtk.Entry(placeholder_text="https://login.empresa.com/mfa*  o  localhost:4200")
         self.secret = Gtk.Entry(visibility=False, input_purpose=Gtk.InputPurpose.PASSWORD,
                                 placeholder_text="Dejar vacío para no cambiarlo" if editing
                                 else "Secreto Base32 o URI otpauth://totp/...")
@@ -57,6 +60,7 @@ class AccountDialog(Gtk.Dialog):
 
         rows = [
             ("Nombre", self.name),
+            ("Cuenta / email", self.username),
             ("URL del formulario", self.url),
             ("Secreto", self.secret),
             ("Selector CSS", self.selector),
@@ -68,7 +72,10 @@ class AccountDialog(Gtk.Dialog):
 
         hint = Gtk.Label(xalign=0, wrap=True, max_width_chars=60)
         hint.set_markup(
-            "<small>Usa <b>*</b> como comodín en la URL. El secreto es el texto que "
+            "<small>Usa <b>*</b> como comodín en la URL; un host solo "
+            "(<i>localhost:4200</i>) abarca todo el sitio. Varias cuentas pueden "
+            "compartir URL si tienen distinto email: se rellena la del usuario con "
+            "el que inicias sesión, o te deja elegir. El secreto es el texto que "
             "aparece bajo el QR al activar el 2FA (o la URI <i>otpauth://</i>). "
             "Si no indicas selector, el campo se detecta automáticamente.</small>")
         grid.attach(hint, 1, len(rows) + 1, 1, 1)
@@ -85,6 +92,7 @@ class AccountDialog(Gtk.Dialog):
 
         acc = account or Account(name="", url_pattern="")
         self.name.set_text(acc.name)
+        self.username.set_text(acc.username)
         self.url.set_text(acc.url_pattern)
         self.selector.set_text(acc.selector)
         self.auto_submit.set_active(acc.auto_submit)
@@ -103,15 +111,18 @@ class AccountDialog(Gtk.Dialog):
         period = int(self.period.get_value())
         algorithm = self.algorithm.get_active_id()
         name = self.name.get_text().strip()
+        username = self.username.get_text().strip()
 
         if secret and secret.lower().startswith("otpauth://"):
             info = parse_otpauth_uri(secret)
             secret, digits, period, algorithm = (
                 info.secret, info.digits, info.period, info.algorithm)
             name = name or info.issuer or info.label
+            username = username or info.account
 
         account = Account(
             name=name,
+            username=username,
             url_pattern=self.url.get_text().strip(),
             selector=self.selector.get_text().strip(),
             auto_submit=self.auto_submit.get_active(),
@@ -132,8 +143,13 @@ class AccountRow(Gtk.ListBoxRow):
         self.add(box)
 
         info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
-        info.add(Gtk.Label(label=account.name, xalign=0,
-                           attributes=_bold()))
+        title = Gtk.Box(spacing=8)
+        title.add(Gtk.Label(label=account.name, attributes=_bold()))
+        if account.username:
+            user = Gtk.Label(label=account.username, ellipsize=Pango.EllipsizeMode.END)
+            user.get_style_context().add_class("username")
+            title.add(user)
+        info.add(title)
         pattern = Gtk.Label(label=account.url_pattern, xalign=0,
                             ellipsize=Pango.EllipsizeMode.END)
         pattern.get_style_context().add_class("pattern")

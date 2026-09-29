@@ -1,14 +1,21 @@
 <!doctype html>
 <!--
   Página de demostración de un login con 2FA en dos pasos, para probar
-  TOTP Autofill en local:
+  TOTP Autofill en local (incluido el caso de varias cuentas en la misma URL):
 
     python3 -m http.server 8765 --directory examples
-    totp-autofill add "Demo" "http://localhost:8765/demo-2fa.html" --secret JBSWY3DPEHPK3PXP --auto-submit
+    totp-autofill add "Demo Ana"  localhost:8765 --user ana@demo.com  --secret JBSWY3DPEHPK3PXP --auto-submit
+    totp-autofill add "Demo Luis" localhost:8765 --user luis@demo.com --secret GEZDGNBVGY3TQOJQ --auto-submit
 
-  y abre http://localhost:8765/demo-2fa.html en el navegador.
-  Con ?split=1 el código se pide en 6 cajas de un dígito.
-  (Ojo: el secreto JBSWY3DPEHPK3PXP es público, úsalo solo para la demo.)
+  y abre http://localhost:8765/demo-2fa.html en el navegador. Entra con
+  ana@demo.com o luis@demo.com (se rellena el código de esa cuenta) o con
+  otro email (aparece un selector para elegir la cuenta).
+
+  Opciones en la URL:
+    ?split=1      el código se pide en 6 cajas de un dígito
+    ?multipage=1  el paso del código es otra página (no una SPA)
+
+  (Ojo: estos secretos son públicos, úsalos solo para la demo.)
 -->
 <html lang="es">
 <head>
@@ -24,21 +31,20 @@
 <body>
   <form id="login">
     <h2>Iniciar sesión</h2>
-    <label>Usuario <input name="username" autocomplete="username" value="demo"></label>
+    <label>Email <input name="username" type="email" autocomplete="username" placeholder="ana@demo.com"></label>
     <label>Contraseña <input name="password" type="password" value="demo"></label>
     <button type="submit">Continuar</button>
   </form>
 
   <script>
-    // Paso 2: el formulario del código aparece tras el login (como en una SPA).
-    const split = new URLSearchParams(location.search).has("split");
-    const codeInputs = split
+    const params = new URLSearchParams(location.search);
+    const codeInputs = params.has("split")
       ? `<div style="display:flex;gap:6px">${'<input class="digit" maxlength="1" inputmode="numeric" style="text-align:center">'.repeat(6)}</div>`
       : `<label>Código <input id="otp" name="otp_code" inputmode="numeric" maxlength="6" autocomplete="off"></label>`;
 
-    document.getElementById("login").addEventListener("submit", (event) => {
-      event.preventDefault();
-      event.target.outerHTML = `
+    // Paso 2: formulario del código.
+    function showMfa(form) {
+      form.outerHTML = `
         <form id="mfa">
           <h2>Verificación en dos pasos</h2>
           <p>Introduce el código de tu app de autenticación.</p>
@@ -50,7 +56,22 @@
         const code = [...e.target.querySelectorAll("input")].map((i) => i.value).join("");
         e.target.outerHTML = `<div class="done" id="result"><h2>✔ Código enviado</h2><p>Código recibido: <b id="received">${code}</b></p></div>`;
       });
-    });
+    }
+
+    if (params.get("step") === "otp") {
+      showMfa(document.getElementById("login"));
+    } else {
+      document.getElementById("login").addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (params.has("multipage")) {
+          // Carga una página nueva para el código, como un login clásico.
+          params.set("step", "otp");
+          location.href = `${location.pathname}?${params}`;
+        } else {
+          showMfa(event.target); // aparece en la misma página, como una SPA
+        }
+      });
+    }
   </script>
 </body>
 </html>

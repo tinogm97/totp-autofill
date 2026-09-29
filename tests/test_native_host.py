@@ -27,7 +27,8 @@ class HandleTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.store = AccountStore(Path(self.tmp.name) / "a.json", MemoryBackend())
         self.acc = self.store.save(
-            Account("ACME", "https://acme.com/2fa*", selector="#otp"), "JBSWY3DPEHPK3PXP")
+            Account("ACME", "https://acme.com/2fa*", username="ana@acme.com",
+                    selector="#otp"), "JBSWY3DPEHPK3PXP")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -38,11 +39,13 @@ class HandleTest(unittest.TestCase):
     def test_patterns(self):
         res = handle({"type": "patterns"}, self.store)
         self.assertEqual(res["patterns"], ["https://acme.com/2fa*"])
+        self.assertEqual(res["users"], ["ana@acme.com"])
 
     def test_match_returns_no_secret(self):
         res = handle({"type": "match", "url": "https://acme.com/2fa"}, self.store)
         self.assertEqual(len(res["accounts"]), 1)
         self.assertEqual(res["accounts"][0]["selector"], "#otp")
+        self.assertEqual(res["accounts"][0]["username"], "ana@acme.com")
         self.assertNotIn("JBSWY3DPEHPK3PXP", str(res))
 
     def test_code_requires_matching_url(self):

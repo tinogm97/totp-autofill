@@ -53,6 +53,12 @@ async function init() {
     const li = document.createElement("li");
     const name = document.createElement("span");
     name.textContent = account.name;
+    if (account.username) {
+      const user = document.createElement("small");
+      user.textContent = account.username;
+      name.append(user);
+    }
+    if (account.id === res.suggested) li.classList.add("suggested");
     const button = document.createElement("button");
     button.textContent = "Rellenar";
     button.addEventListener("click", () => fillWith(account.id));

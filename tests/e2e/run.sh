@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Test end-to-end: carga la extensión en Chromium (Playwright), usa el host
 # nativo real y el llavero real, y comprueba que la página demo recibe el
-# código correcto, tanto en campo único como en 6 cajas.
+# código correcto de la cuenta correcta cuando dos usuarios comparten URL:
+# campo único, 6 cajas, paso del código en otra página y selector de cuentas.
 #
 # Requisitos: node >= 18 y un Chromium de Playwright
 #   (npx playwright install chromium). Chrome de marca no sirve: desde la
@@ -13,7 +14,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORK="$(mktemp -d)"
 PORT=8765
-SECRET=JBSWY3DPEHPK3PXP
+SECRET_ANA=JBSWY3DPEHPK3PXP
+SECRET_LUIS=GEZDGNBVGY3TQOJQ
 export XDG_CONFIG_HOME="$WORK/config" PYTHONPATH="$ROOT"
 
 cleanup() {
@@ -39,15 +41,16 @@ cat > "$WORK/profile/NativeMessagingHosts/com.github.tinogm97.totp_autofill.json
  "allowed_origins": ["chrome-extension://blnffoflcmdajflilndalbfcgeddaakd/"]}
 JSON
 
-python3 -m totp_autofill add "Demo" "http://localhost:$PORT/demo-2fa.html" \
-  --secret "$SECRET" --auto-submit
+# Dos cuentas con la misma URL (solo host:puerto), distinguidas por usuario.
+python3 -m totp_autofill add "Demo Ana" "localhost:$PORT" --user ana@demo.com \
+  --secret "$SECRET_ANA" --auto-submit
+python3 -m totp_autofill add "Demo Luis" "localhost:$PORT" --user luis@demo.com \
+  --secret "$SECRET_LUIS" --auto-submit
 
 python3 -m http.server "$PORT" --directory "$ROOT/examples" >/dev/null 2>&1 &
 SERVER_PID=$!
 
 (cd "$WORK" && npm init -y >/dev/null && npm i playwright-core >/dev/null 2>&1)
 cp "$ROOT/tests/e2e/e2e.mjs" "$WORK/"
-for split in "" 1; do
-  (cd "$WORK" && SPLIT="$split" ROOT="$ROOT" PROFILE="$WORK/profile" PORT="$PORT" \
-    SECRET="$SECRET" node e2e.mjs)
-done
+(cd "$WORK" && ROOT="$ROOT" PROFILE="$WORK/profile" PORT="$PORT" \
+  SECRET_ANA="$SECRET_ANA" SECRET_LUIS="$SECRET_LUIS" node e2e.mjs)
