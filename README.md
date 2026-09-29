@@ -396,14 +396,15 @@ totp-autofill/
 │   ├── native_host.py         #   protocolo Native Messaging
 │   ├── browser_integration.py #   registro del host en navegadores
 │   ├── gui.py                 #   interfaz GTK 3
-│   └── cli.py                 #   línea de comandos
+│   ├── cli.py                 #   línea de comandos
+│   └── icons/                 #   icono de la app (PNG 16–512 px y SVG)
 ├── extension/                 # Extensión Manifest V3 (Chrome + Firefox)
 │   ├── background.js          #   puente con el host nativo + prefiltro
 │   ├── content.js             #   detección y rellenado del campo
 │   └── popup.{html,css,js}    #   estado y relleno manual
 ├── examples/demo-2fa.html     # página demo para probar
 ├── tests/                     # unitarios, paridad JS↔Python, e2e
-├── data/                      # icono y .desktop
+├── data/                      # plantilla del .desktop
 ├── scripts/make_icons.py      # generación de iconos
 ├── get.sh                     # instalador remoto (curl | bash)
 ├── install.sh / uninstall.sh  # instalación desde una copia local
