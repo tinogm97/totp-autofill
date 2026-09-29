@@ -69,12 +69,15 @@ def main(src: Path, dst: Path) -> None:
         "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-movflags", "+faststart",
         str(video))
 
-    # Póster (escena del relleno automático) y GIF corto para el README.
+    # Póster (escena del relleno automático) y la demo completa en GIF: GitHub
+    # no reproduce vídeos del repo dentro del README, pero sí GIF animados.
     auto = src / "3-auto-c.mp4"
     run("-sseof", "-1.2", "-i", str(auto), "-frames:v", "1", str(dst / "demo-poster.png"))
-    run("-i", str(auto), "-vf",
-        "fps=12,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];"
-        "[b][p]paletteuse=dither=bayer:bayer_scale=4", str(dst / "demo.gif"))
+    run("-i", str(video), "-vf",
+        "fps=10,scale=960:-1:flags=lanczos,split[a][b];"
+        "[a]palettegen=max_colors=128:stats_mode=diff[p];"
+        "[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle",
+        str(dst / "demo.gif"))
     print(f"{video}: {total:.1f} s, {video.stat().st_size / 1e6:.1f} MB; "
           f"demo.gif {(dst / 'demo.gif').stat().st_size / 1e6:.1f} MB")
 

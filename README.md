@@ -8,11 +8,11 @@ navegador ni URLs que configurar**:
 - **Con un atajo:** pon el cursor en el campo y pulsa **`Ctrl+Alt+2`**. Funciona
   en cualquier aplicación, no solo en el navegador.
 
-[![Demo: el código 2FA se escribe solo al iniciar sesión](docs/demo.gif)](docs/demo.mp4)
+![Demo de TOTP Autofill (1 minuto): la app, importar desde Google Authenticator, relleno automático, selector de cuenta y atajo de teclado](docs/demo.gif)
 
-▶️ **[Ver el vídeo demo completo (1 minuto)](docs/demo.mp4)**: la app, la
-importación desde Google Authenticator con la webcam, el relleno automático,
-el selector de cuenta y el atajo de teclado.
+<sub>Demo de 1 minuto: la app, la importación desde Google Authenticator con la
+webcam, el relleno automático, el selector de cuenta y el atajo de teclado.
+También en [vídeo MP4](docs/demo.mp4).</sub>
 
 ![Ventana principal](docs/screenshot-main.png)
 
