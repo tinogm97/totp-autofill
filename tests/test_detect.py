@@ -13,6 +13,9 @@ class OtpDetectionTest(unittest.TestCase):
             field(autocomplete="one-time-code"),
             field(label="Código", html_id="otp", maxlength=6),
             field(label="Verification code"),
+            field(label="Código", input_type="tel"),
+            field(label="Code", inputmode="numeric"),
+            field(label="Token", pattern="[0-9]{6}"),
             field(html_name="totp", input_type="number"),
             field(placeholder="Código de 6 dígitos", input_type="tel"),
             field(label="2FA", input_type="password"),
@@ -22,8 +25,8 @@ class OtpDetectionTest(unittest.TestCase):
                 self.assertEqual(otp_confidence(info), 2)
 
     def test_weak(self):
-        self.assertEqual(otp_confidence(field(maxlength=6)), 1)
-        self.assertEqual(otp_confidence(field(maxlength=1, css_class="digit")), 1)
+        self.assertEqual(otp_confidence(field(maxlength=6, input_type="number")), 1)
+        self.assertEqual(otp_confidence(field(maxlength=1, css_class="digit"), group_size=6), 1)
         # Firefox no expone maxlength: se reconoce el grupo de 6 cajas.
         self.assertEqual(otp_confidence(field(css_class="digit"), group_size=6), 1)
         self.assertEqual(otp_confidence(field(css_class="digit"), group_size=2), 0)
@@ -40,6 +43,14 @@ class OtpDetectionTest(unittest.TestCase):
             field(label="Nombre"),
             field(label="Código", maxlength=4),
             field(label="code", input_type="url"),
+            # Campos de texto genéricos que no son numéricos
+            field(maxlength=6),
+            field(label="Código"),
+            field(label="Token de acceso", maxlength=0),
+            field(label="PIN", input_type="text", maxlength=4),
+            field(maxlength=1, css_class="digit"),
+            field(label="Nombre", maxlength=6),
+            field(maxlength=6, input_type="password"),
         ):
             with self.subTest(info=info):
                 self.assertEqual(otp_confidence(info), 0)

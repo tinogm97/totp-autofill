@@ -1,5 +1,13 @@
 # Changelog
 
+## Sin publicar
+
+- El relleno automático es más estricto: solo salta en campos **numéricos de
+  código** (`type=number|tel`, `inputmode=numeric`, `pattern` de dígitos,
+  cajas de un dígito en grupo o `maxlength` de 6-8). Palabras ambiguas como
+  «código», «token» o «PIN» ya no bastan por sí solas, ni los campos de texto
+  o contraseña sin pistas. En esos casos sigue valiendo el atajo `Ctrl+Alt+2`.
+
 ## 2.2.0 — 2026-09-29
 
 - **Firefox** (deb y snap) en modo automático: el lanzador añade

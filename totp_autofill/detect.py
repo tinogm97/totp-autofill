@@ -9,10 +9,18 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+# Palabras que por sí solas delatan un código 2FA.
+OTP_STRONG = re.compile(
+    r"(one.?time|otp|totp|2fa|mfa|two.?factor|second.?factor|auth.?code|"
+    r"(verif|security|confirm)\w*.?(code|c[oó]digo)|c[oó]digo.?de.?(verif|seguridad|confirm)|"
+    r"authenticator|autenticaci)",
+    re.IGNORECASE)
+# Palabras ambiguas ("code", "token", "pin"...): solo cuentan si el campo es numérico.
 OTP_HINT = re.compile(
     r"(one.?time|otp|totp|2fa|mfa|two.?factor|second.?factor|verif|auth.?code|"
     r"security.?code|passcode|token|c[oó]digo|code|pin\b|authenticator|autenticaci)",
     re.IGNORECASE)
+NUMERIC_PATTERN = re.compile(r"(\\d|\[0-9\])")
 NOT_OTP = re.compile(
     r"(user|e-?mail|login|search|buscar|phone|tel[eé]fono|zip|postal|captcha|"
     r"coupon|promo|cup[oó]n|card|tarjeta|cvv|cvc|country|pa[ií]s|password|contrase)",
@@ -34,6 +42,15 @@ class FieldInfo:
     input_type: str = ""  # text, tel, number, email, password...
     maxlength: int = 0  # 0 = sin límite
     autocomplete: str = ""
+    inputmode: str = ""  # numeric, decimal, text...
+    pattern: str = ""  # expresión del atributo pattern
+
+    @property
+    def numeric(self) -> bool:
+        """¿El campo está pensado para dígitos (type, inputmode o pattern)?"""
+        return (self.input_type in ("number", "tel")
+                or self.inputmode in ("numeric", "decimal")
+                or bool(NUMERIC_PATTERN.search(self.pattern)))
 
     @property
     def text(self) -> str:
@@ -55,6 +72,8 @@ class FieldInfo:
             input_type=attrs.get("text-input-type", ""),
             maxlength=maxlength,
             autocomplete=attrs.get("autocomplete", ""),
+            inputmode=attrs.get("inputmode", ""),
+            pattern=attrs.get("pattern", ""),
         )
 
 
@@ -75,10 +94,20 @@ def otp_confidence(info: FieldInfo, digits: int = 6, group_size: int = 0) -> int
         return 2
     if NOT_OTP.search(info.text):
         return 0
+    length_ok = info.maxlength in (0, 1) or info.maxlength >= digits
+    if OTP_STRONG.search(info.text):
+        return 2 if length_ok else 0
     if OTP_HINT.search(info.text):
-        return 2 if info.maxlength in (0, 1) or info.maxlength >= digits else 0
-    # Cajas de un dígito (código "partido") o campo de 6-8 caracteres.
-    if info.maxlength == 1 or info.maxlength in (6, 7, 8):
+        # Palabra ambigua ("code", "token"...): hace falta que el campo sea
+        # numérico o tenga la longitud de un código.
+        looks_numeric = info.numeric or info.maxlength == 1 or info.maxlength in (6, 7, 8)
+        return 2 if looks_numeric and length_ok else 0
+    # Sin pistas en el texto: solo cajas de un dígito o un campo numérico de 6-8.
+    if info.input_type == "password":
+        return 0
+    if info.maxlength == 1 and (info.numeric or group_size in (4, 5, 6, 7, 8)):
+        return 1
+    if info.maxlength in (6, 7, 8) and info.numeric:
         return 1
     if group_size in (6, 7, 8) and info.maxlength == 0 and not info.label:
         return 1
